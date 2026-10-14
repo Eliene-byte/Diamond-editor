@@ -1,0 +1,144 @@
+# DaVinci Clone Configuration
+# Copy to ~/.config/DaVinciClone/config.toml (Linux/macOS)
+# or %APPDATA%\DaVinciClone\config.toml (Windows)
+
+version = 1
+
+[general]
+language = "en"
+auto_save_interval_sec = 300
+max_undo_levels = 100
+check_updates = true
+send_telemetry = false
+start_page = "Edit"  # ProjectManager, NewProject, LastProject, Cut, Edit, Color, Fusion, Fairlight, Deliver
+recent_projects_limit = 10
+
+[ui]
+theme = "Dark"  # Dark, Light, DarkHighContrast, Custom
+font_size = 13.0
+font_family = "Inter"
+ui_scale = 1.0
+show_tooltips = true
+tooltip_delay_ms = 500
+panel_opacity = 0.95
+accent_color = "#FF6B00"
+timeline_thumbnail_size = "Medium"  # None, Small, Medium, Large
+show_timecode = true
+timecode_format = "Smpte"  # Smpte, Frames, FeetFrames
+playback_controls = "Classic"  # Classic, Minimal, TransportOnly
+scopes_layout = "Horizontal"  # Horizontal, Vertical, Grid, Single
+node_graph_style = "Classic"  # Classic, Compact, Minimal
+
+[media]
+auto_create_proxies = false
+proxy_resolution = "Half"  # Quarter, Half, ThreeQuarter, Full
+proxy_codec = "prores_ks"
+generate_thumbnails = true
+thumbnail_interval_sec = 1.0
+audio_waveform_resolution = 1024
+max_concurrent_imports = 4
+watch_folders = []
+supported_extensions = [
+  "mp4", "mov", "mxf", "avi", "mkv", "webm",
+  "prores", "dnxhd", "dnxhr", "r3d", "braw",
+  "wav", "aiff", "flac", "mp3", "aac", "ogg",
+  "jpg", "jpeg", "png", "tiff", "tif", "exr", "dpx", "cin", "hdr",
+  "srt", "ass", "vtt"
+]
+ignore_patterns = [".*", "Thumbs.db", ".DS_Store"]
+
+[timeline]
+default_video_tracks = 4
+default_audio_tracks = 8
+default_resolution = "Uhd4k"  # Ntsc, Pal, Hd720, Hd1080, Dci2k, Uhd4k, Dci4k, Uhd5k, Uhd6k, Uhd8k, Dci8k
+default_frame_rate = "Fps24"  # Fps23_976, Fps24, Fps25, Fps29_97, Fps30, Fps47_952, Fps48, Fps50, Fps59_94, Fps60, Fps72, Fps100, Fps119_88, Fps120
+snap_enabled = true
+snap_threshold_px = 10.0
+ripple_edit_default = false
+show_audio_waveforms = true
+waveform_height = 40.0
+track_height = "Medium"  # Small, Medium, Large
+playhead_style = "Line"  # Line, Triangle, Block
+time_ruler_format = "Auto"  # Auto, Timecode, Frames, Seconds
+
+[color]
+default_color_space = "Rec709"  # Linear, LogC, SLog2, SLog3, CLog, CLog2, CLog3, VLog, ArriLogC, RedLog3G10, BmdFilm, BmdFilmGen5, Rec709, Rec2020, Rec2100_PQ, Rec2100_HLG, P3D65, P3DCI, sRGB, AdobeRGB, ACES2065_1, ACEScct, ACEScg
+default_pixel_format = "Rgba16F"  # Rgb8, Rgba8, Yuv420_8, Yuv422_8, Yuv444_8, Rgb10, Rgba10, Yuv420_10, Yuv422_10, Yuv444_10, P010, Rgb12, Rgba12, Yuv420_12, Yuv422_12, Yuv444_12, Rgba16F, Rgb16F, Rgba32F, Rgb32F, Yuy2, UyvY, V210, V410
+working_gamma = 2.4
+viewer_lut = ""
+scopes_color_space = "Rec709"
+enable_gpu_grade = true
+cache_grade_nodes = true
+lut_directory = ""
+still_store_limit = 100
+
+[audio]
+sample_rate = 48000
+bit_depth = 32
+channels = 2
+buffer_size = 512
+latency_mode = "Low"  # Low, Balanced, High
+master_volume = 1.0
+auto_mute_on_focus_loss = true
+
+[audio.metering]
+peak_hold_time_ms = 2000
+rms_window_ms = 300
+true_peak = true
+k_weighted = true
+
+[gpu]
+backend = "Auto"  # Auto, Vulkan, Metal, Dx12, Dx11, Gl
+adapter_name = ""
+power_preference = "HighPerformance"  # LowPower, HighPerformance
+vsync = true
+max_frames_in_flight = 2
+enable_debug_layer = false
+enable_gpu_validation = false
+
+[gpu.features]
+texture_compression_bc = true
+texture_compression_etc2 = true
+texture_compression_astc = true
+timestamp_query = true
+pipeline_statistics = false
+subgroup = true
+
+[gpu.limits]
+max_texture_dimension_2d = 16384
+max_texture_dimension_3d = 2048
+max_bind_groups = 8
+max_uniform_buffer_size = 65536
+max_storage_buffer_size = 1073741824
+
+[cache]
+cache_dir = ""
+max_size_gb = 50.0
+max_age_days = 30
+enable_proxy_cache = true
+enable_thumbnail_cache = true
+enable_waveform_cache = true
+enable_grade_cache = true
+enable_render_cache = true
+compression = "Lz4"  # None, Lz4, Zstd
+
+[paths]
+projects_dir = ""
+exports_dir = ""
+renders_dir = ""
+luts_dir = ""
+presets_dir = ""
+scripts_dir = ""
+temp_dir = ""
+
+[shortcuts]
+scheme = "DaVinci"  # DaVinci, Premiere, FinalCut, Avid, Custom
+custom = {}
+
+[advanced]
+enable_experimental = false
+log_level = "Info"  # Off, Error, Warn, Info, Debug, Trace
+max_threads = 0  # 0 = auto
+memory_limit_gb = 0.0  # 0 = unlimited
+network_rendering = false
+script_engine = "Lua"  # None, Lua, Python
