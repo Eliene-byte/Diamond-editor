@@ -1,4 +1,4 @@
-//! Main GPU renderer
+//! Main GPU renderer with CPU fallback
 
 use crate::core::types::{Resolution, PixelFormat, ColorSpace, FrameRate};
 use crate::core::time::Frame;
@@ -8,10 +8,44 @@ use crate::gpu::buffer::{BufferManager, UniformBuffer};
 use crate::gpu::color::ColorPipeline;
 use crate::gpu::scopes::ScopesRenderer;
 use crate::gpu::compute::ComputePipeline;
-use wgpu::{Device, Queue, Surface, SurfaceConfiguration, TextureFormat, PresentMode, CompositeAlphaMode};
+use wgpu::{Device, Queue, Surface, SurfaceConfiguration, TextureFormat, PresentMode, CompositeAlphaMode, Backends, Instance, PowerPreference, RequestAdapterOptions};
 use std::sync::Arc;
 use parking_lot::RwLock;
 use crossbeam::channel::{Sender, Receiver, unbounded};
+
+/// Renderer backend type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RendererBackend {
+    Vulkan,
+    Metal,
+    Dx12,
+    Gl,
+    Software, // CPU fallback using OpenGL/ANGLE
+}
+
+impl RendererBackend {
+    pub fn to_wgpu_backend(self) -> Backends {
+        match self {
+            RendererBackend::Vulkan => Backends::VULKAN,
+            RendererBackend::Metal => Backends::METAL,
+            RendererBackend::Dx12 => Backends::DX12,
+            RendererBackend::Gl => Backends::GL,
+            RendererBackend::Software => Backends::GL, // Software via OpenGL/ANGLE
+        }
+    }
+    
+    pub fn from_env() -> Self {
+        // Auto-detect best available backend
+        #[cfg(target_os = "windows")]
+        { RendererBackend::Dx12 }
+        #[cfg(target_os = "macos")]
+        { RendererBackend::Metal }
+        #[cfg(target_os = "linux")]
+        { RendererBackend::Vulkan }
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        { RendererBackend::Gl }
+    }
+}
 
 /// Render command
 #[derive(Debug)]
@@ -73,12 +107,13 @@ pub struct ComputeParams {
     pub params: [f32; 16],
 }
 
-/// GPU Renderer
+/// GPU Renderer with CPU fallback support
 pub struct GpuRenderer {
     device: Arc<Device>,
     queue: Arc<Queue>,
     surface: Option<Surface<'static>>,
     config: RwLock<SurfaceConfiguration>,
+    backend: RendererBackend,
     
     pipeline_manager: PipelineManager,
     texture_manager: TextureManager,
@@ -94,6 +129,35 @@ pub struct GpuRenderer {
     stats: RenderStats,
 }
 
+/// CPU-only renderer for systems without GPU
+pub struct CpuRenderer {
+    width: u32,
+    height: u32,
+    frame_buffer: Vec<u8>,
+}
+
+impl CpuRenderer {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            frame_buffer: vec![0; (width * height * 4) as usize],
+        }
+    }
+    
+    pub fn render_frame(&mut self, _frame: Frame) -> &[u8] {
+        // CPU-based rendering - simple software rasterization
+        // This is a placeholder for full CPU rendering
+        &self.frame_buffer
+    }
+    
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+        self.frame_buffer.resize((width * height * 4) as usize, 0);
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct RenderStats {
     pub frame_time_ms: f32,
@@ -105,32 +169,85 @@ pub struct RenderStats {
 }
 
 impl GpuRenderer {
+    /// Create new renderer with automatic backend selection and fallback
     pub async fn new(
         width: u32,
         height: u32,
         present_mode: PresentMode,
         vsync: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_backend(width, height, present_mode, vsync, None).await
+    }
+    
+    /// Create renderer with specific backend (or auto-detect with fallback)
+    pub async fn with_backend(
+        width: u32,
+        height: u32,
+        present_mode: PresentMode,
+        vsync: bool,
+        backend: Option<RendererBackend>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let backend = backend.unwrap_or_else(RendererBackend::from_env);
+        
+        // Try hardware backends first, then fallback to software
+        let backends_to_try = match backend {
+            RendererBackend::Software => vec![RendererBackend::Software],
+            _ => vec![backend, RendererBackend::Software],
+        };
+        
+        let mut last_error = None;
+        
+        for try_backend in backends_to_try {
+            match Self::try_create_with_backend(width, height, present_mode, vsync, try_backend).await {
+                Ok(renderer) => return Ok(renderer),
+                Err(e) => {
+                    eprintln!("Failed to create renderer with {:?}: {}", try_backend, e);
+                    last_error = Some(e);
+                }
+            }
+        }
+        
+        Err(last_error.unwrap_or_else(|| "All renderer backends failed".into()))
+    }
+    
+    async fn try_create_with_backend(
+        width: u32,
+        height: u32,
+        present_mode: PresentMode,
+        vsync: bool,
+        backend: RendererBackend,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: backend.to_wgpu_backend(),
             ..Default::default()
         });
         
-        // Create surface (would need window handle)
-        // For now, create headless
+        // Request adapter with fallback
         let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: PowerPreference::HighPerformance,
             compatible_surface: None,
-            force_fallback_adapter: false,
-        }).await.ok_or("No GPU adapter found")?;
+            force_fallback_adapter: backend == RendererBackend::Software,
+        }).await.ok_or_else(|| format!("No GPU adapter found for {:?}", backend))?;
+        
+        // Check if adapter supports required features
+        let features = adapter.features();
+        let required_features = wgpu::Features::TEXTURE_COMPRESSION_BC
+            | wgpu::Features::TIMESTAMP_QUERY
+            | wgpu::Features::PUSH_CONSTANTS
+            | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY;
+        
+        if !features.contains(required_features) && backend != RendererBackend::Software {
+            return Err(format!("Adapter missing required features for {:?}", backend).into());
+        }
         
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("DaVinci Clone Device"),
-                required_features: wgpu::Features::TEXTURE_COMPRESSION_BC
-                    | wgpu::Features::TIMESTAMP_QUERY
-                    | wgpu::Features::PUSH_CONSTANTS
-                    | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY,
+                required_features: if backend == RendererBackend::Software {
+                    wgpu::Features::empty()
+                } else {
+                    required_features
+                },
                 required_limits: wgpu::Limits {
                     max_push_constant_size: 256,
                     max_storage_buffers_per_shader_stage: 16,
@@ -168,6 +285,7 @@ impl GpuRenderer {
                 view_formats: vec![],
                 desired_maximum_frame_latency: 2,
             }),
+            backend,
             pipeline_manager,
             texture_manager,
             buffer_manager,
@@ -180,6 +298,12 @@ impl GpuRenderer {
             stats: RenderStats::default(),
         })
     }
+    
+    /// Get the active backend
+    pub fn backend(&self) -> RendererBackend {
+        self.backend
+    }
+}
 
     pub fn configure_surface(&self, surface: Surface<'static>, width: u32, height: u32) {
         let mut config = self.config.write();

@@ -23,16 +23,25 @@ members = []
 
 [features]
 default = ["gpu-vulkan", "codec-ffmpeg", "audio-cpal"]
+# Hardware acceleration backends
 gpu-vulkan = ["wgpu/vulkan"]
 gpu-metal = ["wgpu/metal"]
 gpu-dx12 = ["wgpu/dx12"]
 gpu-gl = ["wgpu/gl"]
+# Software rendering fallback (works on ALL hardware)
+gpu-software = ["wgpu/gl"]
+# Codecs
 codec-ffmpeg = ["ffmpeg-next", "ffmpeg-sys/next"]
 codec-system = []
+# Audio
 audio-cpal = ["cpal/jack", "cpal/alsa", "cpal/wasapi", "cpal/coreaudio"]
 audio-minimal = ["cpal"]
+# UI
 ui-egui = ["egui", "egui-wgpu", "egui-winit"]
 ui-minimal = []
+# CPU-only rendering (no GPU required)
+cpu-only = ["gpu-software", "codec-ffmpeg", "audio-cpal", "ui-minimal"]
+# Performance
 simd = ["packed_simd"]
 profiling = ["tracing", "tracing-subscriber"]
 

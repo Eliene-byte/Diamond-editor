@@ -13,7 +13,7 @@ use core::config::{AppConfig, ConfigManager};
 use core::error::Result;
 use media::pool::MediaPool;
 use timeline::clip::Timeline;
-use gpu::renderer::GpuRenderer;
+use gpu::renderer::{GpuRenderer, RendererBackend};
 use ui::pages::{CutPage, EditPage, ColorPage, FusionPage, FairlightPage, DeliverPage};
 use ui::theme::Theme;
 use ui::layout::LayoutContext;
@@ -34,11 +34,12 @@ fn main() -> Result<()> {
     println!("{} v{}", APP_NAME, VERSION);
     println!("Configuration loaded");
     
-    // Initialize GPU renderer
+    // Initialize GPU renderer with automatic fallback
     let runtime = tokio::runtime::Runtime::new()?;
     let renderer = runtime.block_on(async {
-        GpuRenderer::new(1920, 1080, config.gpu.vsync.into(), config.gpu.vsync).await
+        GpuRenderer::with_backend(1920, 1080, config.gpu.vsync.into(), config.gpu.vsync, None).await
     })?;
+    println!("Renderer backend: {:?}", renderer.backend());
     let renderer = Arc::new(RwLock::new(renderer));
     
     // Create media pool
