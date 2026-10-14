@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [master, main, develop]
+  workflow_dispatch:  # Allow manual trigger
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,11 +33,6 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
             features: "gpu-metal,codec-ffmpeg,audio-cpal"
-            profile: release
-            binary_name: davinci-clone
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            features: "gpu-vulkan,codec-ffmpeg,audio-cpal,profiling"
             profile: release
             binary_name: davinci-clone
 
@@ -184,7 +180,7 @@ jobs:
   bench:
     name: Benchmarks
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -230,7 +226,7 @@ jobs:
     name: Deploy Documentation
     runs-on: ubuntu-latest
     needs: [build, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
       pages: write
       id-token: write
