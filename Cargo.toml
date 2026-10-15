@@ -92,7 +92,11 @@ bytemuck = { version = "1.14", features = ["derive"] }
 winit = { version = "0.30", default-features = false, features = ["x11", "wayland", "rwh_06"] }
 
 # --- Video ---
-ffmpeg-next = { version = "4.2", default-features = false, optional = true }
+# ffmpeg-sys-next links against the system FFmpeg and pins the exact minor
+# version it was built for: 6.1.x targets FFmpeg 6.0/6.1, which is what
+# Ubuntu 24.04 ships. Bumping this crate without bumping the runner image (or
+# vice versa) makes the build script panic at compile time.
+ffmpeg-next = { version = "6.1", default-features = false, optional = true }
 
 # --- Audio ---
 cpal = { version = "0.15", default-features = false, optional = true }

@@ -16,10 +16,16 @@ env:
   # and `-C codegen-units=1` is already set in the release profile.
   RUSTFLAGS: "-C link-arg=-s"
 
+# NOTE ON RUNNER IMAGES
+# `ffmpeg-sys-next` links against the system FFmpeg and its build script panics
+# unless the installed library's minor version matches the one it was built for.
+# The `codec-ffmpeg` matrix entries therefore pin `ubuntu-24.04` (FFmpeg 6.1,
+# matching `ffmpeg-next` 6.1) rather than tracking `ubuntu-latest`. Moving to a
+# newer image means bumping `ffmpeg-next` in the same change.
 jobs:
   verify:
     name: Verify (compiles + tests)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -136,7 +142,7 @@ jobs:
 
   release-build:
     name: Release build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: verify
     steps:
@@ -228,7 +234,7 @@ jobs:
 
   lint:
     name: Lint (advisory)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     continue-on-error: true
     steps:
@@ -245,7 +251,7 @@ jobs:
 
   security:
     name: Security Audit (advisory)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     permissions:
