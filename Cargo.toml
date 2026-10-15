@@ -71,18 +71,23 @@ dirs = "5"
 toml = "0.8"
 
 # --- Serialization ---
-serde = { version = "1.0", features = ["derive"], default-features = false }
-serde_json = { version = "1.0", default-features = false }
+# serde_json needs `std` (or at least `alloc`); it errors out at build time otherwise.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 # --- Math ---
 glam = { version = "0.27", default-features = false, features = ["scalar-math"] }
 
 # --- GPU / Rendering ---
 wgpu = { version = "23", default-features = false, features = [] }
-bytemuck = { version = "1.14", default-features = false }
+# `derive` provides the Pod/Zeroable derive macros used by the uniform structs.
+bytemuck = { version = "1.14", features = ["derive"] }
 
 # --- Windowing ---
-winit = { version = "0.30", default-features = false, features = [] }
+# winit gates each platform behind a feature and hard-errors with
+# "The platform you're compiling for is not supported by winit" when none is set.
+# `x11` + `wayland` cover Linux, `rwh_06` integrates with raw-window-handle 0.6.
+winit = { version = "0.30", default-features = false, features = ["x11", "wayland", "rwh_06"] }
 
 # --- Video ---
 ffmpeg-next = { version = "4.2", default-features = false, optional = true }
@@ -102,6 +107,7 @@ ignore = { version = "0.4", default-features = false }
 # --- Cache ---
 lru = "0.12"
 lz4_flex = { version = "0.11", default-features = false }
+# zstd-sys compiles C code, so zstd needs its default features.
 zstd = "0.13"
 
 # --- Procedural ---
