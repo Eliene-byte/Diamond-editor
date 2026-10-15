@@ -69,6 +69,7 @@ jobs:
             libvulkan-dev libasound2-dev libudev-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxkbcommon-dev libssl-dev pkg-config cmake clang \
+            libclang-dev \
             libavcodec-dev libavformat-dev libavutil-dev \
             libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
 
@@ -179,6 +180,7 @@ jobs:
             libvulkan-dev libasound2-dev libudev-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxkbcommon-dev libssl-dev pkg-config cmake clang \
+            libclang-dev \
             libavcodec-dev libavformat-dev libavutil-dev \
             libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
 
