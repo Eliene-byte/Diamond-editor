@@ -1,8 +1,8 @@
 //! Audio engine - playback, routing, processing
 
 use crate::audio::dsp::{Compressor, Gate, Limiter, EQ, Analyzer, DelayLine, Biquad};
+use crate::audio::device::{open_output_stream, Stream, StreamConfig};
 use crate::core::time::Frame;
-use cpal::{Stream, StreamConfig, SampleRate, SampleFormat, ChannelCount};
 use std::sync::{Arc, Mutex};
 use crossbeam::channel::{Sender, Receiver, unbounded};
 
@@ -83,10 +83,11 @@ struct BusSend {
 
 impl AudioEngine {
     pub fn new(sample_rate: u32, channels: usize, buffer_size: usize) -> Result<Self, Box<dyn std::error::Error>> {
-        let host = cpal::default_host();
-        let device = host.default_output_device().ok_or("No output device")?;
-        let config = device.default_output_config()?.config();
-        
+        // Defaults are filled in by `start()`, which probes the real device when
+        // a backend is compiled in. Keeping a placeholder here means constructing
+        // an engine never fails on a machine with no sound card (CI, containers).
+        let config = StreamConfig::new(sample_rate, channels as u16, buffer_size as u32);
+
         let (playback_tx, playback_rx) = unbounded();
         
         Ok(Self {
@@ -110,24 +111,16 @@ impl AudioEngine {
     }
 
     pub fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let device = cpal::default_host().default_output_device().ok_or("No output device")?;
-        let config = self.config.clone();
-        
         let output_buffer = self.output_buffer.clone();
-        
-        let stream = device.build_output_stream(
-            &config,
-            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                if let Ok(mut buf) = output_buffer.lock() {
-                    let len = data.len().min(buf.len());
-                    data[..len].copy_from_slice(&buf[..len]);
-                    buf[..len].fill(0.0);
-                }
-            },
-            |err| eprintln!("Audio stream error: {}", err),
-            None,
-        )?;
-        
+
+        let stream = open_output_stream(self.config.clone(), move |data: &mut [f32]| {
+            if let Ok(mut buf) = output_buffer.lock() {
+                let len = data.len().min(buf.len());
+                data[..len].copy_from_slice(&buf[..len]);
+                buf[..len].fill(0.0);
+            }
+        })?;
+
         self.stream = Some(stream);
         Ok(())
     }

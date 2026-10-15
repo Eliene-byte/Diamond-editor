@@ -20,7 +20,7 @@ pub struct Transition {
     pub enabled: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TransitionType {
     // Dissolves
     CrossDissolve,

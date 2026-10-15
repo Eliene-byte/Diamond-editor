@@ -246,8 +246,8 @@ impl SelectionTool {
         
         // Select tracks in range
         let track_ids = self.tracks_in_range(timeline, marquee.start_track, marquee.end_track);
-        for track_id in track_ids {
-            self.selection.select_track(track_id, true);
+        for track_id in &track_ids {
+            self.selection.select_track(*track_id, true);
         }
         
         // Select items in range

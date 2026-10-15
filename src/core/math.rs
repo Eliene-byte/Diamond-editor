@@ -5,7 +5,7 @@ use glam::{Vec2, Vec3, Vec4, Mat3, Mat4, Quat};
 use std::ops::{Add, Sub, Mul, Div};
 
 /// 2D point with frame precision
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point2 {
     pub x: f32,
     pub y: f32,
@@ -269,7 +269,10 @@ impl<T: Clone> Bvh2D<T> {
             return idx;
         }
         // Find best split axis
-        let mut min_x = f32::MAX, min_y = f32::MAX, max_x = f32::MIN, max_y = f32::MIN;
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
         for (r, _) in &items {
             min_x = min_x.min(r.x);
             min_y = min_y.min(r.y);
@@ -291,11 +294,11 @@ impl<T: Clone> Bvh2D<T> {
         idx
     }
 
-    pub fn query(&self, rect: Rect, results: &mut Vec<&T>) {
+    pub fn query<'a>(&'a self, rect: Rect, results: &mut Vec<&'a T>) {
         self.query_node(0, rect, results);
     }
 
-    fn query_node(&self, idx: usize, rect: Rect, results: &mut Vec<&T>) {
+    fn query_node<'a>(&'a self, idx: usize, rect: Rect, results: &mut Vec<&'a T>) {
         let node = &self.nodes[idx];
         if !node.bounds.intersect(rect).is_some() { return; }
         if let Some(data) = &node.data { results.push(data); }
@@ -345,25 +348,53 @@ pub mod simd {
         }
     }
 
-    #[target_feature(enable = "avx2")]
-    pub unsafe fn add_saturation_avx2(dst: &mut [f32], amount: f32, len: usize) {
-        use std::arch::x86_64::*;
-        let amt = _mm256_set1_ps(amount);
-        let mut i = 0;
-        while i + 8 <= len {
-            let v = _mm256_loadu_ps(dst.as_ptr().add(i));
-            let gray = _mm256_set1_ps(v[0] * 0.2126 + v[1] * 0.7152 + v[2] * 0.0722); // Simplified - would need shuffle
-            let diff = _mm256_sub_ps(v, gray);
-            let res = _mm256_add_ps(gray, _mm256_mul_ps(diff, amt));
-            _mm256_storeu_ps(dst.as_mut_ptr().add(i), res);
-            i += 8;
+    /// Adjust saturation on an interleaved RGB buffer.
+    ///
+    /// Works on 3-float groups; `len` is the number of floats, so it should be a
+    /// multiple of 3. Any trailing floats that do not form a complete pixel are
+    /// left untouched.
+    pub fn add_saturation_avx2(dst: &mut [f32], amount: f32, len: usize) {
+        // Rec.709 luma coefficients.
+        const R_COEFF: f32 = 0.2126;
+        const G_COEFF: f32 = 0.7152;
+        const B_COEFF: f32 = 0.0722;
+
+        let pixels = (len.min(dst.len()) / 3) * 3;
+        for px in dst[..pixels].chunks_exact_mut(3) {
+            let gray = px[0] * R_COEFF + px[1] * G_COEFF + px[2] * B_COEFF;
+            px[0] = gray + (px[0] - gray) * amount;
+            px[1] = gray + (px[1] - gray) * amount;
+            px[2] = gray + (px[2] - gray) * amount;
         }
-        while i < len {
-            let gray = dst[i] * 0.2126 + dst[i+1] * 0.7152 + dst[i+2] * 0.0722;
-            dst[i] = gray + (dst[i] - gray) * amount;
-            dst[i+1] = gray + (dst[i+1] - gray) * amount;
-            dst[i+2] = gray + (dst[i+2] - gray) * amount;
-            i += 3;
+    }
+
+    /// Runtime check for the AVX2 feature set.
+    pub fn has_avx2() -> bool {
+        std::arch::is_x86_feature_detected!("avx2")
+    }
+}
+
+/// Portable equivalents of the SIMD helpers, so callers outside the x86_64
+/// module still have something to call.
+pub mod simd_fallback {
+    /// Overwrite `dst` with `dst * alpha + src * (1 - alpha)` in place.
+    pub fn blend_normal(dst: &mut [f32], src: &[f32], alpha: &[f32], len: usize) {
+        for i in 0..len {
+            if i >= src.len() || i >= alpha.len() {
+                break;
+            }
+            dst[i] = src[i] * alpha[i] + dst[i] * (1.0 - alpha[i]);
+        }
+    }
+
+    /// Adjust saturation on an interleaved RGB buffer.
+    pub fn add_saturation(dst: &mut [f32], amount: f32, len: usize) {
+        let pixels = (len.min(dst.len()) / 3) * 3;
+        for px in dst[..pixels].chunks_exact_mut(3) {
+            let gray = px[0] * 0.2126 + px[1] * 0.7152 + px[2] * 0.0722;
+            px[0] = gray + (px[0] - gray) * amount;
+            px[1] = gray + (px[1] - gray) * amount;
+            px[2] = gray + (px[2] - gray) * amount;
         }
     }
 }

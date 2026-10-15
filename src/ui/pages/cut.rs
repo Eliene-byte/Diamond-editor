@@ -1,4 +1,5 @@
 //! Cut page - fast assembly editing
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -40,21 +41,31 @@ impl CutPage {
         self.media_pool_widget.set_pool(pool);
     }
 
-    pub fn ui(&mut self, ctx: &LayoutContext) -> Box<dyn Widget> {
-        Box::new(Flex::new(Direction::Vertical)
-            .child(Box::new(self.toolbar.clone()))
-            .child(Box::new(Flex::new(Direction::Horizontal)
-                .child(Box::new(Flex::new(Direction::Vertical)
-                    .child(Box::new(self.source_viewer.clone()))
-                    .child(Box::new(self.media_pool_widget.clone()))
-                    .flex_grow(1.0)
-                ).flex_grow(0.0))
-                .child(Box::new(Flex::new(Direction::Vertical)
-                    .child(Box::new(self.timeline_viewer.clone()))
-                    .child(Box::new(self.timeline_widget.clone()))
-                    .flex_grow(1.0)
-                ).flex_grow(1.0))
-            ).flex_grow(1.0))
+    /// Build the page's widget tree.
+    ///
+    /// The tree is rebuilt from clones on every call so callers get an owned
+    /// `Box<dyn Widget>`; the page keeps its authoritative sub-widget state and
+    /// rebuilds only when the layout is (re)computed.
+    pub fn ui(&mut self, _ctx: &LayoutContext) -> Box<dyn Widget> {
+        let left = Flex::new(Direction::Vertical)
+            .child(Box::new(self.source_viewer.clone()))
+            .child(Box::new(self.media_pool_widget.clone()))
+            .flex_grow(0.0);
+
+        let right = Flex::new(Direction::Vertical)
+            .child(Box::new(self.timeline_viewer.clone()))
+            .child(Box::new(self.timeline_widget.clone()))
+            .flex_grow(1.0);
+
+        let body = Flex::new(Direction::Horizontal)
+            .child(Box::new(left))
+            .child(Box::new(right))
+            .flex_grow(1.0);
+
+        Box::new(
+            Flex::new(Direction::Vertical)
+                .child(Box::new(self.toolbar.clone()))
+                .child(Box::new(body)),
         )
     }
 }

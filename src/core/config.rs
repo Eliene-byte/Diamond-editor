@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::core::types::{Resolution, FrameRate, ColorSpace, PixelFormat};
+use crate::core::types::{Resolution, FrameRate};
+use crate::core::color::{ColorSpace, PixelFormat};
 
 /// Main application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -241,7 +242,7 @@ impl Default for TimelineConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum TrackHeight {
     Small,
     Medium,
@@ -568,6 +569,15 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
+    /// A manager holding the default config with no backing file. Used when the
+    /// on-disk config is missing or unreadable.
+    pub fn in_memory_default() -> Self {
+        Self {
+            config: AppConfig::default(),
+            path: PathBuf::new(),
+        }
+    }
+
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let path = Self::config_path()?;
         let config = if path.exists() {

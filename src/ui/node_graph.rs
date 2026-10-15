@@ -56,6 +56,7 @@ pub enum PortType { Input, Output }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortDataType { Image, Mask, Float, Int, String, Any }
 
+#[derive(Clone)]
 pub struct NodeGraph {
     nodes: HashMap<GradeNodeId, Node>,
     connections: Vec<NodeConnection>,
@@ -259,43 +260,7 @@ impl NodeGraph {
     }
 }
 
-impl Widget for NodeGraph {
-    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        (f32::INFINITY, f32::INFINITY)
-    }
-
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
-        self.rect = rect;
-    }
-
-    fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        // Background
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_primary,
-            rect: [rect.x, rect.y, rect.w, rect.h],
-        });
-
-        // Grid
-        if self.show_grid {
-            self.draw_grid(ctx, rect);
-        }
-
-        // Connections
-        for conn in &self.connections {
-            self.draw_connection(ctx, rect, conn);
-        }
-
-        // Connection being dragged
-        if let Some(drag) = &self.connection_drag {
-            self.draw_drag_connection(ctx, rect, drag);
-        }
-
-        // Nodes
-        for node in self.nodes.values() {
-            self.draw_node(ctx, rect, node);
-        }
-    }
-
+impl NodeGraph {
     fn draw_grid(&self, ctx: &DrawContext, rect: Rect) {
         let grid = self.grid_size * self.zoom;
         let start_x = (rect.x - self.pan.x) / grid * grid + self.pan.x;
@@ -452,7 +417,46 @@ impl Widget for NodeGraph {
             ctx.text_renderer.draw_text(&port.name, Point2::new(node_rect.x + w - name_w - 8.0, port_y + 4.0), 9.0, ctx.theme.text_secondary);
         }
     }
+}
 
+impl Widget for NodeGraph {
+
+    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
+        (f32::INFINITY, f32::INFINITY)
+    }
+
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
+        self.rect = rect;
+    }
+
+    fn draw(&self, ctx: &DrawContext, rect: Rect) {
+        // Background
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_primary,
+            rect: [rect.x, rect.y, rect.w, rect.h],
+        });
+
+        // Grid
+        if self.show_grid {
+            self.draw_grid(ctx, rect);
+        }
+
+        // Connections
+        for conn in &self.connections {
+            self.draw_connection(ctx, rect, conn);
+        }
+
+        // Connection being dragged
+        if let Some(drag) = &self.connection_drag {
+            self.draw_drag_connection(ctx, rect, drag);
+        }
+
+        // Nodes
+        for node in self.nodes.values() {
+            self.draw_node(ctx, rect, node);
+        }
+
+    }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         match event {
             InputEvent::MouseDown(pos, btn) => {
@@ -505,36 +509,42 @@ impl Widget for NodeGraph {
                             }
                         }
                         
-                        // Check node click
-                        for node in self.nodes.values() {
+                        // Check node click. Collect the hit first so the immutable borrow of
+                        // `self.nodes` ends before the selection state is mutated.
+                        let hit = self.nodes.values().find(|node| {
                             let screen_pos = self.graph_to_screen(node.position);
                             let w = node.size.0 * self.zoom;
                             let h = node.size.1 * self.zoom;
                             let node_rect = Rect::new(screen_pos.x, screen_pos.y, w, h);
-                            
-                            if pos.x >= node_rect.x && pos.x < node_rect.x + node_rect.w && pos.y >= node_rect.y && pos.y < node_rect.y + node_rect.h {
-                                if ctx.key_modifiers.shift {
-                                    self.select_node(node.id, true);
-                                } else if ctx.key_modifiers.ctrl {
-                                    if node.selected {
-                                        self.selected_nodes.retain(|&id| id != node.id);
-                                        // Would update node.selected = false
-                                    } else {
-                                        self.select_node(node.id, true);
-                                    }
+
+                            pos.x >= node_rect.x
+                                && pos.x < node_rect.x + node_rect.w
+                                && pos.y >= node_rect.y
+                                && pos.y < node_rect.y + node_rect.h
+                        }).map(|node| (node.id, node.position));
+
+                        if let Some((node_id, node_position)) = hit {
+                            if ctx.key_modifiers.shift {
+                                self.select_node(node_id, true);
+                            } else if ctx.key_modifiers.ctrl {
+                                if self.selected_nodes.contains(&node_id) {
+                                    self.selected_nodes.retain(|&id| id != node_id);
+                                    // Would update node.selected = false
                                 } else {
-                                    self.deselect_all();
-                                    self.select_node(node.id, false);
+                                    self.select_node(node_id, true);
                                 }
-                                
-                                self.drag_state = Some(NodeDragState {
-                                    node_id: node.id,
-                                    start_pos: node.position,
-                                    start_mouse: pos,
-                                    multi_select: self.selected_nodes.len() > 1,
-                                });
-                                return true;
+                            } else {
+                                self.deselect_all();
+                                self.select_node(node_id, false);
                             }
+
+                            self.drag_state = Some(NodeDragState {
+                                node_id,
+                                start_pos: node_position,
+                                start_mouse: pos,
+                                multi_select: self.selected_nodes.len() > 1,
+                            });
+                            return true;
                         }
                         
                         // Click on empty space - deselect
@@ -666,6 +676,7 @@ impl Widget for NodeGraph {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
 
+#[derive(Clone)]
 pub struct NodeGraphWidget {
     graph: NodeGraph,
     toolbar: NodeGraphToolbar,
@@ -689,17 +700,24 @@ impl Widget for NodeGraphWidget {
         self.graph.draw(ctx, Rect::new(rect.x, rect.y + 30.0, rect.w, rect.h - 30.0));
     }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
-        self.toolbar.handle_input(ctx, event) || self.graph.handle_input(ctx, event)
+        if self.toolbar.handle_input(ctx, event.clone()) {
+            return true;
+        }
+        self.graph.handle_input(ctx, event)
     }
     fn as_any(&self) -> &dyn std::any::Any { self }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
 
 #[derive(Clone)]
-struct NodeGraphToolbar;
+struct NodeGraphToolbar {
+    rect: Rect,
+}
 
 impl NodeGraphToolbar {
-    fn new() -> Self { Self }
+    fn new() -> Self {
+        Self { rect: Rect::new(0.0, 0.0, 0.0, 30.0) }
+    }
 }
 
 impl Widget for NodeGraphToolbar {

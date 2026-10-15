@@ -35,7 +35,7 @@ pub struct PoolClip {
     pub modified_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClipStatus {
     Online,
     Offline,
@@ -192,34 +192,54 @@ impl MediaPool {
     }
 
     pub fn move_clip(&self, clip_id: ClipId, target_bin: BinId) -> bool {
-        let clip_key = self.clip_id_to_key.read().get(&clip_id).copied()?;
-        let mut clip = self.clips.write().get_mut(clip_key)?;
-        
-        // Remove from old bin
-        if let Some(old_bin_key) = self.bin_id_to_key.read().get(&clip.bin) {
-            if let Some(old_bin) = self.bins.write().get_mut(*old_bin_key) {
-                old_bin.clips.retain(|id| *id != clip_id);
+        let clip_key = match self.clip_id_to_key.read().get(&clip_id).copied() {
+            Some(k) => k,
+            None => return false,
+        };
+        // Collect the slot keys first: holding a clip borrow while taking a
+        // mutable bin borrow would deadlock the pools against each other.
+        let old_bin = {
+            let clips = self.clips.read();
+            clips.get(clip_key).map(|c| c.bin)
+        };
+
+        if let Some(old_bin) = old_bin {
+            if let Some(old_key) = self.bin_id_to_key.read().get(&old_bin).copied() {
+                if let Some(bin) = self.bins.write().get_mut(old_key) {
+                    bin.clips.retain(|id| *id != clip_id);
+                }
             }
         }
-        
-        // Add to new bin
-        if let Some(new_bin_key) = self.bin_id_to_key.read().get(&target_bin) {
-            if let Some(new_bin) = self.bins.write().get_mut(*new_bin_key) {
-                new_bin.clips.push(clip_id);
+
+        if let Some(new_key) = self.bin_id_to_key.read().get(&target_bin).copied() {
+            if let Some(bin) = self.bins.write().get_mut(new_key) {
+                bin.clips.push(clip_id);
             }
         }
-        
-        clip.bin = target_bin;
-        clip.modified_at = chrono::Utc::now();
-        true
+
+        let mut clips = self.clips.write();
+        match clips.get_mut(clip_key) {
+            Some(clip) => {
+                clip.bin = target_bin;
+                clip.modified_at = chrono::Utc::now();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The pool's implicit root bin. Bins below it form the media-pool tree.
+    pub fn root_bin(&self) -> BinId {
+        self.root_bin
     }
 
     pub fn list_clips(&self, bin_id: Option<BinId>) -> Vec<ClipId> {
         let bin_id = bin_id.unwrap_or(self.root_bin);
         let bin_key = self.bin_id_to_key.read().get(&bin_id).copied();
-        bin_key.and_then(|k| self.bins.read().get(k))
-            .map(|b| b.clips.clone())
-            .unwrap_or_default()
+        match bin_key {
+            Some(k) => self.bins.read().get(k).map(|b| b.clips.clone()).unwrap_or_default(),
+            None => Vec::new(),
+        }
     }
 
     pub fn list_all_clips(&self) -> Vec<ClipId> {
@@ -267,18 +287,24 @@ impl MediaPool {
     }
 
     pub fn delete_bin(&self, bin_id: BinId, move_clips_to: Option<BinId>) -> bool {
-        let key = self.bin_id_to_key.write().remove(&bin_id)?;
-        let bin = self.bins.write().remove(key)?;
+        let key = match self.bin_id_to_key.write().remove(&bin_id) {
+            Some(k) => k,
+            None => return false,
+        };
+        let bin = match self.bins.write().remove(key) {
+            Some(b) => b,
+            None => return false,
+        };
         
         // Move clips
         let target = move_clips_to.unwrap_or(self.root_bin);
         for clip_id in bin.clips {
-            self.move_clip(clip_id, target).ok();
+            self.move_clip(clip_id, target);
         }
         
         // Recursively delete sub-bins
         for sub_bin in bin.sub_bins {
-            self.delete_bin(sub_bin, Some(target)).ok();
+            self.delete_bin(sub_bin, Some(target));
         }
         
         // Remove from parent
@@ -300,8 +326,10 @@ impl MediaPool {
 
     pub fn list_bins(&self, parent: Option<BinId>) -> Vec<BinId> {
         let parent = parent.unwrap_or(self.root_bin);
-        let key = self.bin_id_to_key.read().get(&parent).copied()?;
-        self.bins.read().get(key).map(|b| b.sub_bins.clone()).unwrap_or_default()
+        match self.bin_id_to_key.read().get(&parent).copied() {
+            Some(key) => self.bins.read().get(key).map(|b| b.sub_bins.clone()).unwrap_or_default(),
+            None => Vec::new(),
+        }
     }
 
     pub fn bin_path(&self, bin_id: BinId) -> Vec<BinId> {
@@ -354,7 +382,7 @@ impl MediaPool {
     }
 
     pub fn get_proxy(&self, clip_id: ClipId) -> Option<crate::media::proxy::ProxyMetadata> {
-        self.proxy_manager.get(clip_id).cloned()
+        self.proxy_manager.get(clip_id)
     }
 
     pub fn enable_proxies(&self, enable: bool) {
@@ -380,7 +408,7 @@ impl MediaPool {
         // This would be done in a background task
         // For now, just generate first frame
         if let Ok(thumb) = crate::media::thumbnail::ThumbnailGenerator::default().generate(&PathBuf::from(&path), Frame(0)) {
-            self.update_clip(clip_id, |c| c.thumbnails.push(thumb)).ok();
+            self.update_clip(clip_id, |c| c.thumbnails.push(thumb.clone()));
             self.thumbnail_cache.put(clip_id, Frame(0), thumb);
         }
     }
@@ -392,28 +420,30 @@ impl MediaPool {
         let path = clip.as_ref().unwrap().metadata.file_path.clone();
         
         if let Ok(waveform) = crate::media::waveform::WaveformGenerator::default().generate(&PathBuf::from(&path)) {
-            self.update_clip(clip_id, |c| c.waveform = Some(waveform.clone())).ok();
+            self.update_clip(clip_id, |c| c.waveform = Some(waveform.clone()));
             self.waveform_cache.put(clip_id, waveform);
         }
     }
 
     // Relinking
-    pub fn relink_clip(&self, clip_id: ClipId, new_path: PathBuf) -> Result<()> {
+    pub async fn relink_clip(&self, clip_id: ClipId, new_path: PathBuf) -> Result<()> {
         let metadata = MediaMetadata::from_file(&new_path)?;
         let new_clip_metadata = metadata.to_clip_metadata(clip_id);
-        
-        self.update_clip(clip_id, |c| {
+
+        if !self.update_clip(clip_id, |c| {
             c.metadata = new_clip_metadata;
             c.metadata.file_path = new_path.to_string_lossy().to_string();
             c.status = ClipStatus::Online;
             c.offline_path = None;
             c.media_metadata = Some(metadata);
-        }).ok_or(MediaError::NotFound("Clip not found".into()))?;
-        
+        }) {
+            return Err(MediaError::NotFound("Clip not found".into()).into());
+        }
+
         // Regenerate thumbnails and waveform
         self.generate_thumbnails_async(clip_id).await;
         self.generate_waveform_async(clip_id).await;
-        
+
         Ok(())
     }
 
@@ -421,7 +451,7 @@ impl MediaPool {
         self.update_clip(clip_id, |c| {
             c.status = ClipStatus::Offline;
             c.offline_path = Some(original_path);
-        }).ok();
+        });
     }
 
     // Statistics

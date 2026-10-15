@@ -219,12 +219,13 @@ impl Default for MarkerUI {
 impl MarkerUI {
     pub fn filter(&self, marker: &Marker) -> bool {
         if !self.show_markers { return false; }
-        match marker.marker_type {
+        let type_visible = match marker.marker_type {
             MarkerType::Chapter => self.show_chapters,
             MarkerType::Note => self.show_notes,
             MarkerType::Todo => self.show_todos,
             MarkerType::SyncPoint => self.show_sync,
             _ => true,
-        } && self.filter_color.map_or(true, |c| c == marker.color)
+        };
+        type_visible && self.filter_color.map_or(true, |c| c == marker.color)
     }
 }

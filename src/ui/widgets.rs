@@ -35,7 +35,8 @@ impl Button {
 
 impl Widget for Button {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        let (text_w, text_h) = ctx.theme.font_size_md * self.label.len() as f32 * 0.6, ctx.theme.font_size_md;
+        let text_w = ctx.theme.font_size_md * self.label.len() as f32 * 0.6;
+        let text_h = ctx.theme.font_size_md;
         let (pad_x, pad_y) = match self.size { ButtonSize::Small => (12.0, 6.0), ButtonSize::Medium => (16.0, 8.0), ButtonSize::Large => (24.0, 12.0) };
         (text_w + pad_x * 2.0, text_h + pad_y * 2.0)
     }
@@ -125,7 +126,7 @@ impl Label {
 impl Widget for Label {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
         let font_size = match self.size { LabelSize::Xs => ctx.theme.font_size_xs, LabelSize::Sm => ctx.theme.font_size_sm, LabelSize::Md => ctx.theme.font_size_md, LabelSize::Lg => ctx.theme.font_size_lg, LabelSize::Xl => ctx.theme.font_size_xl, LabelSize::Title => ctx.theme.font_size_title };
-        let (w, h) = ctx.text_renderer.measure_text(&self.text, font_size);
+        let (w, h) = ctx.measure_text(&self.text, font_size);
         (w, h)
     }
     fn layout(&mut self, _ctx: &LayoutContext, _rect: Rect) {}
@@ -304,7 +305,7 @@ impl Checkbox {
 
 impl Widget for Checkbox {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        let (text_w, text_h) = ctx.text_renderer.measure_text(&self.label, ctx.theme.font_size_md);
+        let (text_w, text_h) = ctx.measure_text(&self.label, ctx.theme.font_size_md);
         (20.0 + 8.0 + text_w, text_h.max(20.0))
     }
     fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) { self.rect = rect; }
@@ -379,7 +380,7 @@ impl Tooltip {
 
 impl Widget for Tooltip {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        let (w, h) = ctx.text_renderer.measure_text(&self.content, ctx.theme.font_size_sm);
+        let (w, h) = ctx.measure_text(&self.content, ctx.theme.font_size_sm);
         (w + 16.0, h + 8.0)
     }
     fn layout(&mut self, _ctx: &LayoutContext, _rect: Rect) {}
@@ -410,7 +411,7 @@ impl Panel {
 
 impl Widget for Panel {
     fn measure(&self, ctx: &LayoutContext, constraints: Constraints) -> (f32, f32) {
-        let mut max_w = 0.0;
+        let mut max_w: f32 = 0.0;
         let mut total_h = 0.0;
         for child in &self.children {
             let (w, h) = child.measure(ctx, constraints);
@@ -438,7 +439,7 @@ impl Widget for Panel {
     }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         for child in &mut self.children {
-            if child.handle_input(ctx, event) { return true; }
+            if child.handle_input(ctx, event.clone()) { return true; }
         }
         false
     }

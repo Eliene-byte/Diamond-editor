@@ -2,7 +2,8 @@
 
 use crate::core::id::{ClipId, CacheEntryId};
 use crate::core::time::Frame;
-use crate::core::error::Result;
+use crate::core::types::FrameRate;
+use crate::core::error::{AppError, CacheError, Result};
 use crate::media::decoder::VideoFrame;
 use crate::media::thumbnail::Thumbnail;
 use crate::media::waveform::Waveform;
@@ -129,7 +130,7 @@ impl MediaCache {
     // Frame cache
     pub fn get_frame(&self, clip_id: ClipId, frame: Frame, quality: CacheQuality) -> Option<Arc<VideoFrame>> {
         let key = FrameCacheKey { clip_id, frame, quality };
-        self.frame_cache.read().get(&key).cloned()
+        self.frame_cache.write().get(&key).cloned()
     }
 
     pub fn put_frame(&self, clip_id: ClipId, frame: Frame, quality: CacheQuality, video_frame: VideoFrame) {
@@ -153,7 +154,7 @@ impl MediaCache {
     // Thumbnail cache
     pub fn get_thumbnail(&self, clip_id: ClipId, frame: Frame, size: (u16, u16)) -> Option<Arc<Thumbnail>> {
         let key = ThumbnailCacheKey { clip_id, frame, size };
-        self.thumbnail_cache.read().get(&key).cloned()
+        self.thumbnail_cache.write().get(&key).cloned()
     }
 
     pub fn put_thumbnail(&self, clip_id: ClipId, frame: Frame, size: (u16, u16), thumb: Thumbnail) {
@@ -163,7 +164,7 @@ impl MediaCache {
 
     // Waveform cache
     pub fn get_waveform(&self, clip_id: ClipId) -> Option<Arc<Waveform>> {
-        self.waveform_cache.read().get(&clip_id).cloned()
+        self.waveform_cache.write().get(&clip_id).cloned()
     }
 
     pub fn put_waveform(&self, clip_id: ClipId, waveform: Waveform) {
@@ -172,7 +173,7 @@ impl MediaCache {
 
     // Disk cache
     pub fn cache_to_disk(&self, key: DiskCacheKey, data: &[u8]) -> Result<CacheEntryId> {
-        if !self.config.enable_disk_cache { return Err("Disk cache disabled".into()); }
+        if !self.config.enable_disk_cache { return Err(AppError::Cache(CacheError::Disabled)); }
         
         let entry_id = CacheEntryId::generate();
         let filename = format!("{}.cache", entry_id.0);
@@ -182,7 +183,7 @@ impl MediaCache {
         let compressed = match self.config.compression {
             CacheCompression::None => data.to_vec(),
             CacheCompression::Lz4 => lz4_flex::compress_prepend_size(data),
-            CacheCompression::Zstd => zstd::encode_all(data, 3)?,
+            CacheCompression::Zstd => zstd::encode_all(data, 3).map_err(|e| AppError::Cache(CacheError::Compress(e.to_string())))?,
         };
         
         std::fs::write(&path, &compressed)?;
@@ -209,7 +210,7 @@ impl MediaCache {
     pub fn load_from_disk(&self, entry_id: CacheEntryId) -> Result<Vec<u8>> {
         let mut index = self.disk_index.write();
         let entry = index.entries.get_mut(&entry_id)
-            .ok_or("Cache entry not found")?;
+            .ok_or(AppError::Cache(CacheError::NotFound(format!("{}.cache", entry_id.0))))?;
         
         let data = std::fs::read(&entry.path)?;
         
@@ -219,8 +220,8 @@ impl MediaCache {
         // Decompress
         let decompressed = match self.config.compression {
             CacheCompression::None => data,
-            CacheCompression::Lz4 => lz4_flex::decompress_size_prepended(&data)?,
-            CacheCompression::Zstd => zstd::decode_all(&data[..])?,
+            CacheCompression::Lz4 => lz4_flex::decompress_size_prepended(&data).map_err(|e| AppError::Cache(CacheError::Decompress(e.to_string())))?,
+            CacheCompression::Zstd => zstd::decode_all(&data[..]).map_err(|e| AppError::Cache(CacheError::Decompress(e.to_string())))?,
         };
         
         Ok(decompressed)

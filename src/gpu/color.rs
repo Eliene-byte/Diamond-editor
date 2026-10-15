@@ -5,7 +5,7 @@ use crate::gpu::buffer::{UniformBuffer, ColorGradeUniforms};
 use crate::gpu::texture::{TextureManager, GpuTexture};
 use crate::gpu::pipeline::{PipelineManager, PipelineKey};
 use crate::core::color::{Lut3D, Lut1D, Cdl, ColorSpace};
-use crate::core::types::PixelFormat;
+use crate::core::color::PixelFormat;
 use std::sync::Arc;
 
 /// Color grading pipeline
@@ -90,25 +90,37 @@ impl ColorPipeline {
         grade: ColorGradeUniforms,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.current_grade = grade;
-        
+
         let uniform_buffer = UniformBuffer::new_uniform(device, &grade, Some("Color Grade Uniforms"));
-        
+
+        // Materialise the identity LUTs once. They are cached on the pipeline, so
+        // this only allocates on the first grade that has no LUT applied yet.
+        if self.lut3d_texture.is_none() {
+            self.lut3d_texture = Some(self.create_identity_lut3d());
+        }
+        if self.lut1d_texture.is_none() {
+            self.lut1d_texture = Some(self.create_identity_lut1d());
+        }
+
+        let lut3d_view = &self.lut3d_texture.as_ref().expect("lut3d initialised above").view;
+        let lut1d_view = &self.lut1d_texture.as_ref().expect("lut1d initialised above").view;
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Color Grade Bind Group"),
             layout: &self.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&input.view) },
                 wgpu::BindGroupEntry { binding: 1, resource: uniform_buffer.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(self.lut3d_texture.as_ref().map(|t| &t.view).unwrap_or_else(|| &self.create_identity_lut3d(device).view)) },
-                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(self.lut1d_texture.as_ref().map(|t| &t.view).unwrap_or_else(|| &self.create_identity_lut1d(device).view)) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(lut3d_view) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(lut1d_view) },
             ],
         });
-        
+
         let lut3d_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("LUT 3D Bind Group"),
             layout: &self.lut3d_bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(self.lut3d_texture.as_ref().map(|t| &t.view).unwrap_or_else(|| &self.create_identity_lut3d(device).view)) },
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(lut3d_view) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.texture_manager.get_sampler(Default::default())) },
             ],
         });

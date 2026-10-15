@@ -24,7 +24,7 @@ pub use buffer::{
     TransitionPushConstants, ScopesUniforms,
 };
 pub use texture::{TextureManager, GpuTexture, TexturePool, SamplerKey};
-pub use pipeline::{PipelineManager, PipelineKey, RenderPipeline, TransitionPipelineType, ComputeShaderType};
+pub use pipeline::{PipelineManager, PipelineKey, RenderPipelineBundle, TransitionPipelineType, ComputeShaderType};
 pub use compute::ComputePipeline;
 pub use compute::ComputePipelineEntry;
 pub use color::ColorPipeline;

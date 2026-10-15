@@ -98,16 +98,20 @@ impl PipelineManager {
         pipeline
     }
 
-    fn create_pipeline(&self, key: PipelineKey, format: wgpu::TextureFormat) -> RenderPipeline {
-        let layout = self.get_or_create_layout(key.layout_key());
+    fn create_pipeline(&mut self, key: PipelineKey, format: wgpu::TextureFormat) -> RenderPipeline {
+        let bind_group_layout = self.get_or_create_bind_group_layout(key.layout_key().bind_group_key());
         let shader = self.get_or_create_shader(key.shader_key());
-        
+
+        let bgl: &BindGroupLayout = &bind_group_layout;
+        // Bind the range slice to a local: the descriptor borrows it.
+        let push_constants = key.push_constant_ranges();
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{:?} Layout", key)),
-            // `Arc<PipelineLayout>` does not coerce to `&[&BindGroupLayout]`: deref coercion
-            // does not apply to array element types, so build the slice explicitly.
-            bind_group_layouts: std::slice::from_ref(&*layout),
-            push_constant_ranges: &key.push_constant_ranges(),
+            // `Arc<BindGroupLayout>` does not coerce to `&[&BindGroupLayout]`: deref
+            // coercion does not apply to array element types, so build the slice
+            // explicitly rather than writing `&[layout.as_ref()]`.
+            bind_group_layouts: std::slice::from_ref(&bgl),
+            push_constant_ranges: &push_constants,
         });
         
         let (vertex_entry, vertex_buffers) = key.vertex_state();
@@ -128,7 +132,7 @@ impl PipelineManager {
             fragment: Some(wgpu::FragmentState {
                 module: shader.as_ref(),
                 entry_point: Some(fragment_entry),
-                targets,
+                targets: &targets,
                 compilation_options: Default::default(),
             }),
             multiview: None,
@@ -146,13 +150,16 @@ impl PipelineManager {
         layout
     }
 
-    fn create_layout(&self, key: LayoutKey) -> PipelineLayout {
+    fn create_layout(&mut self, key: LayoutKey) -> PipelineLayout {
         let bind_group_layout = self.get_or_create_bind_group_layout(key.bind_group_key());
-        
+
+        let bgl: &BindGroupLayout = &bind_group_layout;
+        let push_constants = key.push_constant_ranges();
+
         self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{:?} Layout", key)),
-            bind_group_layouts: std::slice::from_ref(&*bind_group_layout),
-            push_constant_ranges: &key.push_constant_ranges(),
+            bind_group_layouts: std::slice::from_ref(&bgl),
+            push_constant_ranges: &push_constants,
         })
     }
 
@@ -231,14 +238,14 @@ impl PipelineKey {
         }
     }
 
-    fn vertex_state(&self) -> (&'static str, &'static [wgpu::VertexBufferLayout]) {
+    fn vertex_state(&self) -> (&'static str, &'static [wgpu::VertexBufferLayout<'static>]) {
         match self {
             PipelineKey::Text => ("vs_text", &[crate::gpu::text::TEXT_VERTEX_LAYOUT]),
             _ => ("vs_main", &[]),
         }
     }
 
-    fn fragment_state(&self, format: wgpu::TextureFormat) -> (&'static str, &'static [Option<wgpu::ColorTargetState>]) {
+    fn fragment_state(&self, format: wgpu::TextureFormat) -> (&'static str, Vec<Option<wgpu::ColorTargetState>>) {
         let target = Some(wgpu::ColorTargetState {
             format,
             blend: Some(match self {
@@ -247,7 +254,7 @@ impl PipelineKey {
             }),
             write_mask: wgpu::ColorWrites::ALL,
         });
-        ("fs_main", &[target])
+        ("fs_main", vec![target])
     }
 
     fn primitive_state(&self) -> wgpu::PrimitiveState {
@@ -454,13 +461,12 @@ impl ShaderKey {
                 ComputeShaderType::Stabilize => include_str!("../assets/shaders/compute/stabilize.wgsl"),
                 ComputeShaderType::Transcode => include_str!("../assets/shaders/compute/transcode.wgsl"),
             },
-            ShaderKey::Custom(_) => include_str!("../assets/shaders/quad.wgsl"),
         }
     }
 }
 
-/// Render pipeline wrapper
-pub struct RenderPipeline {
+/// A fully-built render pipeline plus the layouts it was created against.
+pub struct RenderPipelineBundle {
     pub pipeline: wgpu::RenderPipeline,
     pub layout: Arc<PipelineLayout>,
     pub bind_group_layout: Arc<BindGroupLayout>,

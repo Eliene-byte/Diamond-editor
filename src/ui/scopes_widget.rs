@@ -1,15 +1,17 @@
 //! Scopes widget - waveform, parade, vectorscope, histogram
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
 use crate::ui::theme::Theme;
 use crate::gpu::scopes::{ScopesRenderer, ScopeMode};
 use crate::gpu::texture::GpuTexture;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
+#[derive(Clone)]
 pub struct ScopesWidget {
     device: Option<Arc<wgpu::Device>>,
-    scopes_renderer: Option<Arc<ScopesRenderer>>,
+    scopes_renderer: Arc<parking_lot::RwLock<Option<Arc<ScopesRenderer>>>>,
     current_mode: ScopeMode,
     modes: Vec<ScopeMode>,
     input_texture: Option<GpuTexture>,
@@ -26,7 +28,7 @@ impl ScopesWidget {
     pub fn new() -> Self {
         Self {
             device: None,
-            scopes_renderer: None,
+            scopes_renderer: Arc::new(parking_lot::RwLock::new(None)),
             current_mode: ScopeMode::Waveform,
             modes: vec![ScopeMode::Waveform, ScopeMode::Parade, ScopeMode::Vectorscope, ScopeMode::Histogram],
             input_texture: None,
@@ -41,7 +43,8 @@ impl ScopesWidget {
     /// Until this is called the widget stays inert (no GPU work, nothing drawn).
     pub fn set_device(&mut self, device: &Arc<wgpu::Device>, queue: &Arc<wgpu::Queue>) {
         self.device = Some(device.clone());
-        self.scopes_renderer = Some(Arc::new(ScopesRenderer::new(device.clone(), queue.clone())));
+        *self.scopes_renderer.write() =
+            Some(Arc::new(ScopesRenderer::new(device.clone(), queue.clone())));
         // Output textures belong to the previous device, drop them.
         self.output_textures.clear();
         self.render_scopes();
@@ -67,9 +70,9 @@ impl ScopesWidget {
     }
 
     fn render_scopes(&mut self) {
-        let input = match &self.input_texture { Some(t) => t, None => return };
+        let input = match &self.input_texture { Some(t) => t.clone(), None => return };
         let device = match &self.device { Some(d) => d.clone(), None => return };
-        let renderer = match self.scopes_renderer.as_mut() { Some(r) => r, None => return };
+        let renderer = match self.scopes_renderer.read().clone() { Some(r) => r, None => return };
         let gain = self.gain;
         let modes = self.modes.clone();
 
@@ -82,14 +85,19 @@ impl ScopesWidget {
                     wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
                     Some(&format!("Scope {:?}", mode)),
                 )
+            }).clone();
+
+            // `ScopesRenderer` mutates its cached scope images, so drive it through
+            // the unique borrow held by the local `Arc` clone.
+            let mut renderer = Arc::clone(&renderer);
+            Arc::get_mut(&mut renderer).map(|r| {
+                match mode {
+                    ScopeMode::Waveform => { r.render_waveform(&input, &output, gain).ok(); }
+                    ScopeMode::Parade => { r.render_parade(&input, &output, gain).ok(); }
+                    ScopeMode::Vectorscope => { r.render_vectorscope(&input, &output, gain).ok(); }
+                    ScopeMode::Histogram => { r.render_histogram(&input, &output, gain).ok(); }
+                }
             });
-            
-            match mode {
-                ScopeMode::Waveform => renderer.render_waveform(input, output, gain).ok(),
-                ScopeMode::Parade => renderer.render_parade(input, output, gain).ok(),
-                ScopeMode::Vectorscope => renderer.render_vectorscope(input, output, gain).ok(),
-                ScopeMode::Histogram => renderer.render_histogram(input, output, gain).ok(),
-            };
         }
     }
 }
@@ -201,6 +209,22 @@ impl Widget for ScopesWidget {
                         ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawTexture {
                             texture: tex.clone(),
                             dest_rect: [x, y, w, h],
+                            src_rect: [0.0, 0.0, 1.0, 1.0],
+                            opacity: 1.0,
+                            blend_mode: crate::gpu::renderer::BlendMode::Normal,
+                        });
+                    }
+                }
+            }
+            ScopesLayout::Dual => {
+                // Two panes: the selected mode on top, the next mode below it.
+                let h = scope_rect.h / 2.0;
+                for (row, mode) in self.modes.iter().take(2).enumerate() {
+                    if let Some(tex) = self.output_textures.get(mode) {
+                        let y = scope_rect.y + row as f32 * h;
+                        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawTexture {
+                            texture: tex.clone(),
+                            dest_rect: [scope_rect.x, y, scope_rect.w, h],
                             src_rect: [0.0, 0.0, 1.0, 1.0],
                             opacity: 1.0,
                             blend_mode: crate::gpu::renderer::BlendMode::Normal,

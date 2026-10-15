@@ -160,16 +160,27 @@ impl UndoManager {
         }
     }
 
+    /// Lock the timeline for mutation, recovering from lock poisoning so a
+    /// panicking command cannot wedge the undo stack.
+    fn timeline_mut(&self) -> std::sync::RwLockWriteGuard<'_, crate::timeline::clip::Timeline> {
+        self.timeline
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     pub fn push(&mut self, mut command: Box<dyn Command>) -> Result<()> {
         // Execute command
-        command.execute(&mut *self.timeline.write())?;
+        command.execute(&mut self.timeline_mut())?;
         
-        // Check for merge
-        if let Some(last) = self.undo_stack.back() {
+        // Check for merge. The previous command is popped first so its borrow
+        // ends before command moves into the stack.
+        if let Some(mut last) = self.undo_stack.pop_back() {
             if last.merges_with(command.as_ref()) {
                 last.merge(command)?;
+                self.undo_stack.push_back(last);
                 return Ok(());
             }
+            self.undo_stack.push_back(last);
         }
         
         // Add to undo stack
@@ -188,7 +199,7 @@ impl UndoManager {
 
     pub fn undo(&mut self) -> Result<()> {
         if let Some(mut command) = self.undo_stack.pop_back() {
-            command.undo(&mut *self.timeline.write())?;
+            command.undo(&mut self.timeline_mut())?;
             self.redo_stack.push_back(command);
             Ok(())
         } else {
@@ -198,7 +209,7 @@ impl UndoManager {
 
     pub fn redo(&mut self) -> Result<()> {
         if let Some(mut command) = self.redo_stack.pop_back() {
-            command.execute(&mut *self.timeline.write())?;
+            command.execute(&mut self.timeline_mut())?;
             self.undo_stack.push_back(command);
             Ok(())
         } else {
@@ -243,12 +254,14 @@ impl UndoManager {
         Ok(())
     }
 
-    pub fn add_to_group(&mut self, command: Box<dyn Command>) -> Result<()> {
-        if let Some(group) = &mut self.current_group {
-            command.execute(&mut *self.timeline.write())?;
-            group.commands.push(command);
-        } else {
-            self.push(command)?;
+    pub fn add_to_group(&mut self, mut command: Box<dyn Command>) -> Result<()> {
+        // Execute first, with no other borrow of self live, then file the
+        // command into the open group (if any).
+        command.execute(&mut self.timeline_mut())?;
+
+        match self.current_group.as_mut() {
+            Some(group) => group.commands.push(command),
+            None => self.push(command)?,
         }
         Ok(())
     }
@@ -258,7 +271,8 @@ fn apply_snapshot(
     timeline: &mut crate::timeline::clip::Timeline,
     snapshot: &Snapshot,
 ) -> Result<()> {
-    use crate::timeline::track::TrackItemsMut;
+    use crate::timeline::clip::TrackItemsMut;
+    use crate::timeline::track::{TrackItem, TrackItemKey};
     
     match snapshot {
         Snapshot::ClipAdded { item_id, data } => {
@@ -277,7 +291,16 @@ fn apply_snapshot(
                 volume: data.volume,
                 pan: data.pan,
                 speed: data.speed,
-                effects: data.effects.clone(),
+                effects: data
+                    .effects
+                    .iter()
+                    .map(|e| crate::timeline::track::TrackItemEffect {
+                        effect_type: e.effect_type,
+                        enabled: e.enabled,
+                        parameters: e.parameters.clone(),
+                        keyframes: e.keyframes.clone(),
+                    })
+                    .collect(),
                 transitions: data.transitions,
                 color: data.color,
                 metadata: data.metadata.clone(),
@@ -302,10 +325,11 @@ fn apply_snapshot(
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 let duration = item.timeline_duration();
                 item.timeline_range = FrameRange::new(*to, *to + duration);
-                if let Some(track) = timeline.get_track_mut(item.track_id) {
-                    track.items_mut().remove(&item.timeline_range.start);
-                    track.items_mut().insert(*to, item.key);
-                }
+            }
+            // Re-key the track index once the item borrow has ended.
+            if let Some(item) = timeline.get_item(*item_id) {
+                let track_id = item.track_id;
+                timeline.reindex_item(track_id, *item_id);
             }
         }
         
@@ -326,7 +350,7 @@ fn apply_snapshot(
         
         Snapshot::EffectAdded { item_id, effect } => {
             if let Some(item) = timeline.get_item_mut(*item_id) {
-                item.effects.push(crate::timeline::clip::TrackItemEffect {
+                item.effects.push(crate::timeline::track::TrackItemEffect {
                     effect_type: effect.effect_type,
                     enabled: effect.enabled,
                     parameters: effect.parameters.clone(),
@@ -347,7 +371,6 @@ fn apply_snapshot(
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 if *effect_index < item.effects.len() {
                     item.effects[*effect_index].parameters = params.parameters.clone();
-                    item.effects[*effect_index].keyframes = params.keyframes.clone();
                 }
             }
         }

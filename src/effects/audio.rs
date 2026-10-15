@@ -5,7 +5,6 @@ use crate::core::time::Frame;
 use crate::core::id::EffectId;
 use crate::audio::dsp::{Biquad, DelayLine, Compressor, Gate, Limiter, EQ, Analyzer};
 use std::collections::HashMap;
-use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
 
 /// Audio effect instance
 #[derive(Debug, Clone)]
@@ -20,7 +19,7 @@ pub struct AudioEffect {
     dsp_state: Option<AudioDSPState>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum AudioDSPState {
     EQ(EQ),
     Compressor(Compressor),
@@ -32,7 +31,7 @@ enum AudioDSPState {
     Filter(Biquad),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 struct ReverbState {
     // Convolution reverb or algorithmic
     impulse_response: Option<Vec<f32>>,
@@ -40,9 +39,10 @@ struct ReverbState {
     mix: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PitchState {
-    resampler: Option<SincFixedIn<f32>>,
+    /// Playback-rate ratio. Pitch shifting additionally needs a dedicated
+    /// resampler; until one is wired up this only affects the reported ratio.
     ratio: f32,
 }
 
@@ -64,67 +64,67 @@ impl AudioEffect {
         
         match effect_type {
             EffectType::Volume => {
-                params.insert("volume".into(), EffectValue::Float(1.0));
-                params.insert("pan".into(), EffectValue::Float(0.0));
+                params.insert("volume".to_string(), EffectValue::Float(1.0));
+                params.insert("pan".to_string(), EffectValue::Float(0.0));
             }
             EffectType::Pan => {
-                params.insert("pan".into(), EffectValue::Float(0.0));
-                params.insert("law".into(), EffectValue::Int(0)); // Linear, Constant Power, etc.
+                params.insert("pan".to_string(), EffectValue::Float(0.0));
+                params.insert("law".to_string(), EffectValue::Int(0)); // Linear, Constant Power, etc.
             }
-            EffectType::EQ => {
+            EffectType::Eq => {
                 // Parametric EQ bands
                 for i in 0..6 {
-                    params.insert(&format!("band{}_freq", i), EffectValue::Float([100.0, 250.0, 1000.0, 4000.0, 8000.0, 16000.0][i]));
-                    params.insert(&format!("band{}_gain", i), EffectValue::Float(0.0));
-                    params.insert(&format!("band{}_q", i), EffectValue::Float(1.0));
-                    params.insert(&format!("band{}_type", i), EffectValue::Int(0)); // Peak, Low Shelf, High Shelf, Low Pass, High Pass
-                    params.insert(&format!("band{}_enabled", i), EffectValue::Bool(true));
+                    params.insert(format!("band{}_freq", i), EffectValue::Float([100.0, 250.0, 1000.0, 4000.0, 8000.0, 16000.0][i]));
+                    params.insert(format!("band{}_gain", i), EffectValue::Float(0.0));
+                    params.insert(format!("band{}_q", i), EffectValue::Float(1.0));
+                    params.insert(format!("band{}_type", i), EffectValue::Int(0)); // Peak, Low Shelf, High Shelf, Low Pass, High Pass
+                    params.insert(format!("band{}_enabled", i), EffectValue::Bool(true));
                 }
-                params.insert("analyzer".into(), EffectValue::Bool(false));
+                params.insert("analyzer".to_string(), EffectValue::Bool(false));
             }
             EffectType::Dynamics => {
-                params.insert("threshold".into(), EffectValue::Float(-24.0));
-                params.insert("ratio".into(), EffectValue::Float(4.0));
-                params.insert("attack".into(), EffectValue::Float(10.0)); // ms
-                params.insert("release".into(), EffectValue::Float(100.0)); // ms
-                params.insert("knee".into(), EffectValue::Float(6.0)); // dB
-                params.insert("makeup".into(), EffectValue::Float(0.0));
-                params.insert("mode".into(), EffectValue::Int(0)); // Compressor, Limiter, Expander, Gate
+                params.insert("threshold".to_string(), EffectValue::Float(-24.0));
+                params.insert("ratio".to_string(), EffectValue::Float(4.0));
+                params.insert("attack".to_string(), EffectValue::Float(10.0)); // ms
+                params.insert("release".to_string(), EffectValue::Float(100.0)); // ms
+                params.insert("knee".to_string(), EffectValue::Float(6.0)); // dB
+                params.insert("makeup".to_string(), EffectValue::Float(0.0));
+                params.insert("mode".to_string(), EffectValue::Int(0)); // Compressor, Limiter, Expander, Gate
             }
             EffectType::Delay => {
-                params.insert("time".into(), EffectValue::Float(500.0)); // ms
-                params.insert("feedback".into(), EffectValue::Float(0.3));
-                params.insert("mix".into(), EffectValue::Float(0.5));
-                params.insert("sync".into(), EffectValue::Bool(false));
-                params.insert("low_cut".into(), EffectValue::Float(20.0));
-                params.insert("high_cut".into(), EffectValue::Float(20000.0));
+                params.insert("time".to_string(), EffectValue::Float(500.0)); // ms
+                params.insert("feedback".to_string(), EffectValue::Float(0.3));
+                params.insert("mix".to_string(), EffectValue::Float(0.5));
+                params.insert("sync".to_string(), EffectValue::Bool(false));
+                params.insert("low_cut".to_string(), EffectValue::Float(20.0));
+                params.insert("high_cut".to_string(), EffectValue::Float(20000.0));
             }
             EffectType::Reverb => {
-                params.insert("room_size".into(), EffectValue::Float(0.5));
-                params.insert("damping".into(), EffectValue::Float(0.5));
-                params.insert("width".into(), EffectValue::Float(1.0));
-                params.insert("mix".into(), EffectValue::Float(0.3));
-                params.insert("pre_delay".into(), EffectValue::Float(20.0));
-                params.insert("low_cut".into(), EffectValue::Float(100.0));
-                params.insert("high_cut".into(), EffectValue::Float(8000.0));
+                params.insert("room_size".to_string(), EffectValue::Float(0.5));
+                params.insert("damping".to_string(), EffectValue::Float(0.5));
+                params.insert("width".to_string(), EffectValue::Float(1.0));
+                params.insert("mix".to_string(), EffectValue::Float(0.3));
+                params.insert("pre_delay".to_string(), EffectValue::Float(20.0));
+                params.insert("low_cut".to_string(), EffectValue::Float(100.0));
+                params.insert("high_cut".to_string(), EffectValue::Float(8000.0));
             }
             EffectType::Pitch => {
-                params.insert("semitones".into(), EffectValue::Float(0.0));
-                params.insert("cents".into(), EffectValue::Float(0.0));
-                params.insert("formant".into(), EffectValue::Bool(true));
-                params.insert("quality".into(), EffectValue::Int(2)); // Low, Medium, High
+                params.insert("semitones".to_string(), EffectValue::Float(0.0));
+                params.insert("cents".to_string(), EffectValue::Float(0.0));
+                params.insert("formant".to_string(), EffectValue::Bool(true));
+                params.insert("quality".to_string(), EffectValue::Int(2)); // Low, Medium, High
             }
             EffectType::Filter => {
-                params.insert("type".into(), EffectValue::Int(0)); // Low Pass, High Pass, Band Pass, Notch
-                params.insert("frequency".into(), EffectValue::Float(1000.0));
-                params.insert("resonance".into(), EffectValue::Float(1.0));
-                params.insert("slope".into(), EffectValue::Int(0)); // 6dB, 12dB, 24dB, 48dB
+                params.insert("type".to_string(), EffectValue::Int(0)); // Low Pass, High Pass, Band Pass, Notch
+                params.insert("frequency".to_string(), EffectValue::Float(1000.0));
+                params.insert("resonance".to_string(), EffectValue::Float(1.0));
+                params.insert("slope".to_string(), EffectValue::Int(0)); // 6dB, 12dB, 24dB, 48dB
             }
             EffectType::NoiseReduction => {
-                params.insert("reduction".into(), EffectValue::Float(6.0)); // dB
-                params.insert("threshold".into(), EffectValue::Float(-40.0));
-                params.insert("sensitivity".into(), EffectValue::Float(6.0));
-                params.insert("frequency_smoothing".into(), EffectValue::Float(3.0));
+                params.insert("reduction".to_string(), EffectValue::Float(6.0)); // dB
+                params.insert("threshold".to_string(), EffectValue::Float(-40.0));
+                params.insert("sensitivity".to_string(), EffectValue::Float(6.0));
+                params.insert("frequency_smoothing".to_string(), EffectValue::Float(3.0));
             }
             _ => {}
         }
@@ -134,13 +134,13 @@ impl AudioEffect {
 
     fn create_dsp_state(effect_type: EffectType, sample_rate: u32) -> Option<AudioDSPState> {
         match effect_type {
-            EffectType::EQ => Some(AudioDSPState::EQ(EQ::new(sample_rate))),
+            EffectType::Eq => Some(AudioDSPState::EQ(EQ::new(sample_rate))),
             EffectType::Dynamics => Some(AudioDSPState::Compressor(Compressor::new(sample_rate))),
             EffectType::Gate => Some(AudioDSPState::Gate(Gate::new(sample_rate))),
             EffectType::Limiter => Some(AudioDSPState::Limiter(Limiter::new(sample_rate))),
             EffectType::Delay => Some(AudioDSPState::Delay(DelayLine::new(sample_rate, 2.0))), // 2s max
             EffectType::Reverb => Some(AudioDSPState::Reverb(ReverbState { impulse_response: None, delay_lines: Vec::new(), mix: 0.3 })),
-            EffectType::Pitch => Some(AudioDSPState::Pitch(PitchState { resampler: None, ratio: 1.0 })),
+            EffectType::Pitch => Some(AudioDSPState::Pitch(PitchState { ratio: 1.0 })),
             EffectType::Filter => Some(AudioDSPState::Filter(Biquad::new())),
             _ => None,
         }
@@ -152,7 +152,7 @@ impl AudioEffect {
         match self.effect_type {
             EffectType::Volume => self.process_volume(input, channels),
             EffectType::Pan => self.process_pan(input, channels),
-            EffectType::EQ => self.process_eq(input, channels, sample_rate),
+            EffectType::Eq => self.process_eq(input, channels, sample_rate),
             EffectType::Dynamics => self.process_dynamics(input, channels, sample_rate),
             EffectType::Delay => self.process_delay(input, channels, sample_rate),
             EffectType::Reverb => self.process_reverb(input, channels, sample_rate),
@@ -265,7 +265,7 @@ impl AudioEffect {
     }
 
     fn process_pitch(&mut self, input: &mut [f32], channels: usize, sample_rate: u32) {
-        // Would use rubato for pitch shifting
+        // Pitch shifting needs a dedicated resampler; left as a pass-through for now.
     }
 
     fn process_filter(&mut self, input: &mut [f32], channels: usize, sample_rate: u32) {

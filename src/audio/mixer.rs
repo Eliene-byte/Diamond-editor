@@ -146,7 +146,7 @@ enum AutomationMode { Read, Write, Touch, Latch, Off }
 struct AutomationPoint {
     frame: Frame,
     value: f32,
-    interpolation: super::core::types::Interpolation,
+    interpolation: crate::core::types::Interpolation,
 }
 
 impl AudioMixer {
@@ -261,7 +261,7 @@ impl AudioMixer {
         }).points.push(AutomationPoint {
             frame,
             value,
-            interpolation: super::core::types::Interpolation::Linear,
+            interpolation: crate::core::types::Interpolation::Linear,
         });
     }
 

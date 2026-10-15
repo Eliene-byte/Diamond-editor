@@ -10,151 +10,11 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use ffmpeg_next as ffmpeg;
 
-/// Decoded video frame
-#[derive(Debug, Clone)]
-pub struct VideoFrame {
-    pub clip_id: ClipId,
-    pub frame: Frame,
-    pub pts: i64,
-    pub dts: i64,
-    pub width: u32,
-    pub height: u32,
-    pub format: PixelFormat,
-    pub color_space: ColorSpace,
-    pub data: Arc<VideoFrameData>,
-    pub keyframe: bool,
-    pub duration: Frame,
-}
 
-#[derive(Debug)]
-pub struct VideoFrameData {
-    pub planes: [Vec<u8>; 4],
-    pub strides: [usize; 4],
-    pub format: PixelFormat,
-}
-
-impl VideoFrameData {
-    pub fn new(format: PixelFormat, width: u32, height: u32) -> Self {
-        let (plane_count, planes, strides) = match format {
-            PixelFormat::Rgba8 | PixelFormat::Rgb8 => {
-                let stride = (width * 4) as usize;
-                let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
-            }
-            PixelFormat::Rgba16F => {
-                let stride = (width * 8) as usize;
-                let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
-            }
-            PixelFormat::Rgba32F => {
-                let stride = (width * 16) as usize;
-                let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
-            }
-            PixelFormat::Yuv420_8 | PixelFormat::Yuv420_10 | PixelFormat::Yuv420_12 => {
-                let y_stride = width as usize;
-                let uv_stride = (width / 2) as usize;
-                let y_size = y_stride * height as usize;
-                let uv_size = uv_stride * (height / 2) as usize;
-                (3, [
-                    vec![0; y_size],
-                    vec![0; uv_size],
-                    vec![0; uv_size],
-                    Vec::new(),
-                ], [y_stride, uv_stride, uv_stride, 0])
-            }
-            PixelFormat::Yuv422_8 | PixelFormat::Yuv422_10 | PixelFormat::Yuv422_12 => {
-                let y_stride = width as usize;
-                let uv_stride = (width / 2) as usize;
-                let y_size = y_stride * height as usize;
-                let uv_size = uv_stride * height as usize;
-                (3, [
-                    vec![0; y_size],
-                    vec![0; uv_size],
-                    vec![0; uv_size],
-                    Vec::new(),
-                ], [y_stride, uv_stride, uv_stride, 0])
-            }
-            PixelFormat::Yuv444_8 | PixelFormat::Yuv444_10 | PixelFormat::Yuv444_12 => {
-                let stride = width as usize;
-                let size = stride * height as usize;
-                (3, [
-                    vec![0; size],
-                    vec![0; size],
-                    vec![0; size],
-                    Vec::new(),
-                ], [stride, stride, stride, 0])
-            }
-            PixelFormat::P010 => {
-                let y_stride = width as usize;
-                let uv_stride = (width / 2) as usize;
-                let y_size = y_stride * height as usize;
-                let uv_size = uv_stride * (height / 2) as usize * 2; // 10-bit packed
-                (2, [
-                    vec![0; y_size],
-                    vec![0; uv_size],
-                    Vec::new(),
-                    Vec::new(),
-                ], [y_stride, uv_stride, 0, 0])
-            }
-            _ => {
-                let stride = (width * 4) as usize;
-                let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
-            }
-        };
-        Self { planes, strides, format }
-    }
-
-    pub fn plane(&self, i: usize) -> &[u8] {
-        &self.planes[i]
-    }
-
-    pub fn plane_mut(&mut self, i: usize) -> &mut [u8] {
-        &mut self.planes[i]
-    }
-
-    pub fn stride(&self, i: usize) -> usize {
-        self.strides[i]
-    }
-}
-
-/// Decoded audio frame
-#[derive(Debug, Clone)]
-pub struct AudioFrame {
-    pub clip_id: ClipId,
-    pub frame: Frame,
-    pub pts: i64,
-    pub sample_rate: u32,
-    pub channels: u16,
-    pub format: AudioFormat,
-    pub data: Arc<AudioFrameData>,
-    pub duration: Frame,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AudioFormat {
-    U8,
-    I16,
-    I32,
-    F32,
-    F64,
-}
-
-#[derive(Debug)]
-pub struct AudioFrameData {
-    pub channels: Vec<Vec<f32>>, // Normalized to f32
-    pub samples: usize,
-}
-
-impl AudioFrameData {
-    pub fn new(channels: u16, samples: usize) -> Self {
-        Self {
-            channels: vec![vec![0.0; samples]; channels as usize],
-            samples,
-        }
-    }
-}
+// Frame containers live in crate::media::frame so they remain available
+// regardless of which codec backend is compiled in. They are re-exported
+// here to keep the historical media::decoder::{VideoFrame, ..} paths working.
+pub use crate::media::frame::{AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData};
 
 /// Video decoder with frame-accurate seeking
 pub struct VideoDecoder {
@@ -266,21 +126,26 @@ impl VideoDecoder {
         self.seek_to_pts(self.frame_to_pts(start))?;
         
         let mut frame = ffmpeg::frame::Video::empty();
+        // Tracks the last frame index seen, so we can stop once decoding passes `end`.
+        let mut last_frame = start;
+        let mut reached_end = false;
+
         while let Some(packet) = self.read_packet()? {
             if packet.stream() != self.video_stream_index { continue; }
-            
+
             self.codec_ctx.as_mut().unwrap().send_packet(&packet)
                 .map_err(|e| CodecError::DecodingFailed(e.to_string()))?;
-            
+
             while self.codec_ctx.as_mut().unwrap().receive_frame(&mut frame).is_ok() {
                 let frame_num = self.pts_to_frame(frame.pts().unwrap_or(0));
                 if frame_num < start { continue; }
-                if frame_num >= end { break; }
-                
+                if frame_num >= end { reached_end = true; break; }
+
                 frames.push(self.convert_frame(frame, frame_num)?);
+                last_frame = frame_num;
                 frame = ffmpeg::frame::Video::empty();
             }
-            if frame_num >= end { break; }
+            if reached_end || last_frame >= end { break; }
         }
         
         Ok(frames)

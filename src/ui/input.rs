@@ -26,7 +26,7 @@ impl InputState {
 
     /// Record a window event, updating continuous state and queueing discrete events.
     pub fn handle_event(&mut self, event: InputEvent) {
-        match event {
+        match event.clone() {
             InputEvent::MouseMove(pos) => {
                 self.mouse_delta = Point2::new(pos.x - self.mouse_pos.x, pos.y - self.mouse_pos.y);
                 self.mouse_pos = pos;
@@ -157,7 +157,11 @@ impl ClickDetector {
             dx * dx + dy * dy <= self.threshold_px * self.threshold_px
         };
 
-        let is_double = within_time && within_dist && self.last_click_time >= 0.0;
+        // A click only counts as the second of a pair if there *was* a first click.
+        // `last_click_time` is reset to -1.0 after a completed pair, so a third
+        // click does not chain into a second double-click.
+        let had_previous = self.last_click_time >= 0.0;
+        let is_double = had_previous && within_time && within_dist;
 
         self.last_click_time = if is_double { -1.0 } else { now_ms };
         self.last_click_pos = pos;
@@ -202,9 +206,15 @@ mod tests {
         assert!(!c.register(Point2::new(0.0, 0.0), 5000.0));
         assert!(!c.register(Point2::new(0.0, 0.0), 9000.0));
 
-        // Too far: not a double.
+        // Too far from the previous click: not a double.
         assert!(!c.register(Point2::new(500.0, 0.0), 9200.0));
-        assert!(!c.register(Point2::new(501.0, 0.0), 9250.0));
+
+        // The click at 9200 is still a valid anchor, so a close, quick
+        // follow-up *is* a double - a distance check only rejects one pairing.
+        assert!(c.register(Point2::new(501.0, 0.0), 9250.0));
+
+        // A third click in the same spot must not chain into a second double.
+        assert!(!c.register(Point2::new(501.0, 0.0), 9300.0));
     }
 
     #[test]

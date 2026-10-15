@@ -7,12 +7,13 @@ use crate::media::decoder::{VideoFrame, VideoDecoder};
 use crate::timeline::clip::Timeline;
 use crate::timeline::track::TrackItem;
 use crate::core::time::Frame;
-use crate::core::types::PixelFormat;
+use crate::core::color::PixelFormat;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use crossbeam::channel::{Sender, Receiver, unbounded};
 
 /// Frame ready for display
+#[derive(Clone)]
 pub struct DisplayFrame {
     pub texture: GpuTexture,
     pub frame: Frame,
@@ -31,7 +32,7 @@ pub struct FrameMetadata {
 /// Playback engine - handles frame decoding, caching, and rendering
 pub struct PlaybackEngine {
     renderer: Arc<RwLock<GpuRenderer>>,
-    texture_manager: Arc<TextureManager>,
+    texture_manager: RwLock<TextureManager>,
     color_pipeline: Arc<RwLock<ColorPipeline>>,
     
     // Frame cache
@@ -62,7 +63,7 @@ pub struct PlaybackEngine {
 struct DecodeRequest {
     clip_id: crate::core::id::ClipId,
     frame: Frame,
-    respond_to: Sender<Result<VideoFrame, String>>,
+    respond_to: Sender<DisplayFrame>,
 }
 
 struct FrameCache {
@@ -102,7 +103,7 @@ impl PlaybackEngine {
             let r = renderer.read();
             (r.device().clone(), r.queue().clone())
         };
-        let texture_manager = Arc::new(TextureManager::new(device.clone(), queue.clone()));
+        let texture_manager = RwLock::new(TextureManager::new(device.clone(), queue.clone()));
         let color_pipeline = Arc::new(RwLock::new(ColorPipeline::new(device, queue)));
         
         let (frame_tx, frame_rx) = unbounded();
@@ -156,7 +157,7 @@ impl PlaybackEngine {
         let items = timeline.items_at_frame(frame);
         if items.is_empty() {
             // Return blank frame
-            let blank = self.texture_manager.create_render_target(1920, 1080);
+            let blank = self.texture_manager.write().create_render_target(1920, 1080);
             return Ok(DisplayFrame {
                 texture: blank,
                 frame,
@@ -195,7 +196,7 @@ impl PlaybackEngine {
         }
         
         // Render composite
-        let output = self.texture_manager.create_render_target(1920, 1080);
+        let output = self.texture_manager.write().create_render_target(1920, 1080);
         
         // Submit composite command
         self.renderer.write().submit(RenderCommand::Composite { layers, output: output.clone() });
@@ -213,7 +214,7 @@ impl PlaybackEngine {
 
     fn upload_video_frame(&self, frame: &VideoFrame) -> Result<GpuTexture, Box<dyn std::error::Error>> {
         // Upload frame data to GPU
-        let texture = self.texture_manager.upload(&frame.data.plane(0), frame.width, frame.height, frame.format);
+        let texture = self.texture_manager.write().upload(&frame.data.plane(0), frame.width, frame.height, frame.format);
         Ok(texture)
     }
 

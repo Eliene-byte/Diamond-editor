@@ -1,4 +1,5 @@
 //! Media pool widget - clip browser and bin management
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -8,6 +9,7 @@ use crate::core::id::{ClipId, BinId};
 use crate::core::types::MediaType;
 use std::sync::{Arc, RwLock};
 
+#[derive(Clone)]
 pub struct MediaPoolWidget {
     pool: Option<Arc<RwLock<MediaPool>>>,
     current_bin: Option<BinId>,
@@ -66,7 +68,7 @@ impl MediaPoolWidget {
         self.clips.clear();
         if let Some(pool) = &self.pool {
             if let Ok(p) = pool.read() {
-                let bin = self.current_bin.unwrap_or(p.root_bin);
+                let bin = self.current_bin.unwrap_or(p.root_bin());
                 let clip_ids = p.list_clips(Some(bin));
                 
                 for clip_id in clip_ids {
@@ -97,9 +99,9 @@ impl MediaPoolWidget {
                         SortBy::Duration => a.duration.cmp(&b.duration),
                         SortBy::DateAdded => a.id.0.cmp(&b.id.0),
                         SortBy::Resolution => {
-                            let ar = a.resolution.map(|r| r.0 * r.1).unwrap_or(0);
-                            let br = b.resolution.map(|r| r.0 * r.1).unwrap_or(0);
-                            ar.cmp(&br)
+                            let ar = a.resolution.map(|r| r.aspect_ratio()).unwrap_or(0.0);
+                            let br = b.resolution.map(|r| r.aspect_ratio()).unwrap_or(0.0);
+                            ar.total_cmp(&br)
                         }
                     };
                     if self.sort_ascending { ord } else { ord.reverse() }
@@ -109,55 +111,7 @@ impl MediaPoolWidget {
     }
 }
 
-impl Widget for MediaPoolWidget {
-    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        (320.0, f32::INFINITY)
-    }
-
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
-        self.rect = rect;
-    }
-
-    fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        // Toolbar
-        let toolbar_rect = Rect::new(rect.x, rect.y, rect.w, 40.0);
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_secondary,
-            rect: [toolbar_rect.x, toolbar_rect.y, toolbar_rect.w, toolbar_rect.h],
-        });
-
-        // Search
-        let search_rect = Rect::new(toolbar_rect.x + 10.0, toolbar_rect.y + 5.0, 200.0, 30.0);
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_tertiary,
-            rect: [search_rect.x, search_rect.y, search_rect.w, search_rect.h],
-        });
-        ctx.text_renderer.draw_text(&format!("Search: {}", self.search_text), Point2::new(search_rect.x + 8.0, search_rect.y + 20.0), ctx.theme.font_size_sm, ctx.theme.text_primary);
-
-        // View mode buttons
-        let modes = [("List", ViewMode::List), ("Thumb", ViewMode::Thumbnail), ("Detail", ViewMode::Detail)];
-        let mut btn_x = toolbar_rect.x + 230.0;
-        for (label, mode) in modes {
-            let active = self.view_mode == mode;
-            let btn_rect = Rect::new(btn_x, toolbar_rect.y + 5.0, 50.0, 30.0);
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: if active { ctx.theme.accent } else { ctx.theme.bg_tertiary },
-                rect: [btn_rect.x, btn_rect.y, btn_rect.w, btn_rect.h],
-            });
-            ctx.text_renderer.draw_text(label, Point2::new(btn_rect.x + btn_rect.w * 0.5, btn_rect.y + 20.0), ctx.theme.font_size_xs, ctx.theme.text_primary);
-            btn_x += 55.0;
-        }
-
-        // Clip list
-        let list_rect = Rect::new(rect.x, toolbar_rect.y + toolbar_rect.h, rect.w, rect.h - toolbar_rect.h);
-        
-        match self.view_mode {
-            ViewMode::List => self.draw_list(ctx, list_rect),
-            ViewMode::Thumbnail => self.draw_thumbnails(ctx, list_rect),
-            ViewMode::Detail => self.draw_detail(ctx, list_rect),
-        }
-    }
-
+impl MediaPoolWidget {
     fn draw_list(&self, ctx: &DrawContext, rect: Rect) {
         let row_height = 24.0;
         for (i, clip) in self.clips.iter().enumerate() {
@@ -241,6 +195,58 @@ impl Widget for MediaPoolWidget {
         self.draw_list(ctx, rect);
     }
 
+    }
+
+impl Widget for MediaPoolWidget {
+
+    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
+        (320.0, f32::INFINITY)
+    }
+
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
+        self.rect = rect;
+    }
+
+    fn draw(&self, ctx: &DrawContext, rect: Rect) {
+        // Toolbar
+        let toolbar_rect = Rect::new(rect.x, rect.y, rect.w, 40.0);
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_secondary,
+            rect: [toolbar_rect.x, toolbar_rect.y, toolbar_rect.w, toolbar_rect.h],
+        });
+
+        // Search
+        let search_rect = Rect::new(toolbar_rect.x + 10.0, toolbar_rect.y + 5.0, 200.0, 30.0);
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_tertiary,
+            rect: [search_rect.x, search_rect.y, search_rect.w, search_rect.h],
+        });
+        ctx.text_renderer.draw_text(&format!("Search: {}", self.search_text), Point2::new(search_rect.x + 8.0, search_rect.y + 20.0), ctx.theme.font_size_sm, ctx.theme.text_primary);
+
+        // View mode buttons
+        let modes = [("List", ViewMode::List), ("Thumb", ViewMode::Thumbnail), ("Detail", ViewMode::Detail)];
+        let mut btn_x = toolbar_rect.x + 230.0;
+        for (label, mode) in modes {
+            let active = self.view_mode == mode;
+            let btn_rect = Rect::new(btn_x, toolbar_rect.y + 5.0, 50.0, 30.0);
+            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                color: if active { ctx.theme.accent } else { ctx.theme.bg_tertiary },
+                rect: [btn_rect.x, btn_rect.y, btn_rect.w, btn_rect.h],
+            });
+            ctx.text_renderer.draw_text(label, Point2::new(btn_rect.x + btn_rect.w * 0.5, btn_rect.y + 20.0), ctx.theme.font_size_xs, ctx.theme.text_primary);
+            btn_x += 55.0;
+        }
+
+        // Clip list
+        let list_rect = Rect::new(rect.x, toolbar_rect.y + toolbar_rect.h, rect.w, rect.h - toolbar_rect.h);
+        
+        match self.view_mode {
+            ViewMode::List => self.draw_list(ctx, list_rect),
+            ViewMode::Thumbnail => self.draw_thumbnails(ctx, list_rect),
+            ViewMode::Detail => self.draw_detail(ctx, list_rect),
+        }
+
+    }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         match event {
             InputEvent::MouseDown(pos, btn) => {

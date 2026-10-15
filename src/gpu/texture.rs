@@ -2,9 +2,11 @@
 
 use wgpu::{Device, Queue, Texture, TextureView, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, Extent3d, FilterMode, AddressMode, SamplerDescriptor};
 use std::sync::Arc;
-use crate::core::types::PixelFormat;
+use crate::core::color::PixelFormat;
 
-/// Managed GPU texture
+/// A GPU texture handle. Cloning is cheap: the underlying resource is shared
+/// through `Arc`, and wgpu keeps it alive until the last clone drops.
+#[derive(Debug, Clone)]
 pub struct GpuTexture {
     pub texture: Arc<Texture>,
     pub view: Arc<TextureView>,
@@ -212,7 +214,7 @@ impl TextureManager {
 
     fn pixel_format_to_gpu(&self, format: PixelFormat) -> TextureFormat {
         match format {
-            PixelFormat::Rgb8 => TextureFormat::Rgb8UnormSrgb,
+            PixelFormat::Rgb8 => TextureFormat::Rgba8UnormSrgb,
             PixelFormat::Rgba8 => TextureFormat::Rgba8UnormSrgb,
             PixelFormat::Rgb10 => TextureFormat::Rgb10a2Unorm,
             PixelFormat::Rgba10 => TextureFormat::Rgb10a2Unorm,
@@ -248,9 +250,10 @@ impl TextureManager {
             wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) },
             wgpu::Extent3d { width, height, depth_or_array_layers: depth },
         );
+        let view = texture.create_view(&Default::default());
         GpuTexture {
             texture: Arc::new(texture),
-            view: Arc::new(texture.create_view(&Default::default())),
+            view: Arc::new(view),
             format: wgpu::TextureFormat::Rgba8Unorm,
             width, height, depth, mip_levels: 1,
             usage: wgpu::TextureUsages::TEXTURE_BINDING,
@@ -275,9 +278,10 @@ impl TextureManager {
             wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 6), rows_per_image: None },
             wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 },
         );
+        let view = texture.create_view(&Default::default());
         GpuTexture {
             texture: Arc::new(texture),
-            view: Arc::new(texture.create_view(&Default::default())),
+            view: Arc::new(view),
             format: wgpu::TextureFormat::Rgba16Unorm,
             width, height: 1, depth: 1, mip_levels: 1,
             usage: wgpu::TextureUsages::TEXTURE_BINDING,

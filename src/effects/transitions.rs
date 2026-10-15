@@ -8,7 +8,7 @@
 
 use crate::core::id::TransitionId;
 use crate::core::time::{Frame, FrameRate};
-use crate::timeline::transitions::{Transition, TransitionAlignment, TransitionType};
+pub use crate::timeline::transitions::{Transition, TransitionAlignment, TransitionType};
 
 /// Default transition duration in frames at the given frame rate.
 pub fn default_transition_duration(fps: FrameRate) -> Frame {

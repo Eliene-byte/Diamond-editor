@@ -1,9 +1,9 @@
 //! Fundamental types for video editing
 
 use std::fmt;
-use crate::time::{Frame, Timecode, Rational};
-use crate::color::{ColorSpace, PixelFormat};
-use crate::id::{ClipId, TrackId, BinId, MarkerId, EffectId};
+use crate::core::time::{Frame, Timecode, Rational};
+use crate::core::color::{ColorSpace, PixelFormat};
+use crate::core::id::{BinId, ClipId, EffectId, MarkerId, TrackId, TrackItemId};
 
 /// Unique identifier for any timeline object
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -22,8 +22,9 @@ impl fmt::Display for ObjectId {
 }
 
 /// Media type classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MediaType {
+    #[default]
     Video,
     Audio,
     Image,
@@ -33,7 +34,7 @@ pub enum MediaType {
 }
 
 /// Video resolution preset
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Resolution {
     // Standard
     Ntsc,
@@ -99,7 +100,7 @@ impl Resolution {
 }
 
 /// Frame rate
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum FrameRate {
     Fps23_976,
     Fps24,
@@ -147,6 +148,7 @@ impl FrameRate {
 
 /// Project settings - immutable once created
 #[derive(Debug, Clone)]
+#[derive(PartialEq)]
 pub struct ProjectSettings {
     pub name: String,
     pub resolution: Resolution,
@@ -175,6 +177,7 @@ impl Default for ProjectSettings {
 
 /// Timeline settings
 #[derive(Debug, Clone)]
+#[derive(PartialEq)]
 pub struct TimelineSettings {
     pub name: String,
     pub resolution: Resolution,
@@ -204,9 +207,11 @@ impl Default for TimelineSettings {
 }
 
 /// Clip metadata from media file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ClipMetadata {
     pub id: ClipId,
+    /// Display name, normally the file stem.
+    pub name: String,
     pub file_path: String,
     pub media_type: MediaType,
     pub duration: Frame,
@@ -218,8 +223,19 @@ pub struct ClipMetadata {
     pub audio_sample_rate: Option<u32>,
     pub codec_name: Option<String>,
     pub bit_rate: Option<u64>,
+    /// Size of the source file in bytes.
+    pub size_bytes: u64,
+    pub has_video: bool,
+    pub has_audio: bool,
     pub tags: ClipTags,
     pub thumbnails: Vec<Thumbnail>,
+}
+
+impl ClipMetadata {
+    /// Size of the source file in bytes, or 0 when unknown.
+    pub fn file_size(&self) -> u64 {
+        self.size_bytes
+    }
 }
 
 /// User-editable clip tags
@@ -234,7 +250,7 @@ pub struct ClipTags {
 }
 
 bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct ClipFlags: u32 {
         const NONE = 0;
         const OFFLINE = 1 << 0;
@@ -276,11 +292,11 @@ pub struct Thumbnail {
 pub enum EditOperation {
     // Clip operations
     AddClip { clip_id: ClipId, track: TrackId, position: Frame },
-    RemoveClip { clip_id: ClipId },
-    MoveClip { clip_id: ClipId, from: Frame, to: Frame, track: TrackId },
-    TrimClip { clip_id: ClipId, edge: TrimEdge, old: Frame, new: Frame },
-    SplitClip { clip_id: ClipId, position: Frame },
-    JoinClips { clip_id_a: ClipId, clip_id_b: ClipId },
+    RemoveClip { item_id: TrackItemId },
+    MoveClip { item_id: TrackItemId, from: Frame, to: Frame, track: TrackId },
+    TrimClip { item_id: TrackItemId, edge: TrimEdge, old: Frame, new: Frame },
+    SplitClip { item_id: TrackItemId, position: Frame },
+    JoinClips { item_id_a: TrackItemId, item_id_b: TrackItemId },
 
     // Track operations
     AddTrack { track_id: TrackId, track_type: TrackType, index: u32 },
@@ -324,6 +340,7 @@ pub enum TrackType {
 }
 
 #[derive(Debug, Clone)]
+#[derive(PartialEq)]
 pub struct EffectParams {
     pub effect_type: EffectType,
     pub parameters: std::collections::HashMap<String, EffectValue>,
@@ -355,6 +372,12 @@ pub enum EffectType {
     Pan,
     Eq,
     Dynamics,
+    Gate,
+    Limiter,
+    Delay,
+    Reverb,
+    Pitch,
+    Filter,
     NoiseReduction,
     // Generators
     SolidColor,
@@ -392,7 +415,7 @@ pub enum Interpolation {
     Hold,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Easing {
     None,
     EaseIn,
@@ -402,6 +425,7 @@ pub enum Easing {
 }
 
 #[derive(Debug, Clone)]
+#[derive(PartialEq)]
 pub struct MarkerData {
     pub name: String,
     pub note: String,

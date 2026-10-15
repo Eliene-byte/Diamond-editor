@@ -1,15 +1,18 @@
 //! Timeline widget - professional timeline editing
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
 use crate::ui::theme::Theme;
 use crate::timeline::clip::Timeline;
-use crate::timeline::track::{TrackItem, VideoTrack, AudioTrack, SubtitleTrack};
+use crate::timeline::clip::TrackItems;
+use crate::timeline::track::{AudioTrack, SubtitleTrack, TrackItem, VideoTrack};
 use crate::core::time::{Frame, FrameRange, Timecode, FrameRate};
 use crate::core::types::{TrackType, MediaType};
 use crate::core::id::{TrackId, TrackItemId};
 use std::sync::{Arc, RwLock};
 
+#[derive(Clone)]
 pub struct TimelineWidget {
     timeline: Option<Arc<RwLock<Timeline>>>,
     playhead: Frame,
@@ -95,36 +98,7 @@ impl TimelineWidget {
     }
 }
 
-impl Widget for TimelineWidget {
-    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        (f32::INFINITY, 400.0)
-    }
-
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
-        self.rect = rect;
-    }
-
-    fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        // Background
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_primary,
-            rect: [rect.x, rect.y, rect.w, rect.h],
-        });
-
-        // Time ruler
-        self.draw_time_ruler(ctx, rect);
-
-        if let Some(timeline) = &self.timeline {
-            if let Ok(tl) = timeline.read() {
-                // Draw tracks
-                self.draw_tracks(ctx, rect, &tl);
-                
-                // Draw playhead
-                self.draw_playhead(ctx, rect);
-            }
-        }
-    }
-
+impl TimelineWidget {
     fn draw_time_ruler(&self, ctx: &DrawContext, rect: Rect) {
         let ruler_rect = Rect::new(rect.x, rect.y, rect.w, self.time_ruler_height);
         ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
@@ -180,8 +154,8 @@ impl Widget for TimelineWidget {
 
             // Clips
             if let Some(tl) = self.timeline.as_ref().and_then(|t| t.read().ok()) {
-                for (_, key) in &track.items {
-                    if let Some(item) = tl.items.get(key) {
+                for (_, key) in track.items() {
+                    if let Some(item) = tl.item_by_key(*key) {
                         self.draw_clip(ctx, track_rect, item);
                     }
                 }
@@ -277,6 +251,37 @@ impl Widget for TimelineWidget {
             });
         }
     }
+}
+
+impl Widget for TimelineWidget {
+    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
+        (f32::INFINITY, 400.0)
+    }
+
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
+        self.rect = rect;
+    }
+
+    fn draw(&self, ctx: &DrawContext, rect: Rect) {
+        // Background
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_primary,
+            rect: [rect.x, rect.y, rect.w, rect.h],
+        });
+
+        // Time ruler
+        self.draw_time_ruler(ctx, rect);
+
+        if let Some(timeline) = &self.timeline {
+            if let Ok(tl) = timeline.read() {
+                // Draw tracks
+                self.draw_tracks(ctx, rect, &tl);
+
+                // Draw playhead
+                self.draw_playhead(ctx, rect);
+            }
+        }
+    }
 
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         match event {
@@ -305,7 +310,7 @@ impl Widget for TimelineWidget {
                             // Check for item click
                             if let Some(timeline) = &self.timeline {
                                 if let Ok(tl) = timeline.read() {
-                                    for (_, item) in &tl.items {
+                                    for item in tl.iter_items() {
                                         let item_x = self.frame_to_x(item.timeline_in());
                                         let item_w = item.timeline_duration().0 as f32 * self.zoom;
                                         if pos.x >= item_x && pos.x <= item_x + item_w {

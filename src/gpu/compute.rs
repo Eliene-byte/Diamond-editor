@@ -38,8 +38,18 @@ impl ComputePipeline {
             ComputePipelineType::Transcode,
         ] {
             let (pipeline, layout, bind_group_layout) = Self::create_pipeline(&device, pipeline_type);
-            pipelines.insert(pipeline_type, ComputePipelineEntry { pipeline: Arc::new(pipeline), layout: Arc::new(layout), bind_group_layout: Arc::new(bind_group_layout.clone()) });
             bind_group_layouts.insert(pipeline_type, Arc::new(bind_group_layout));
+            pipelines.insert(
+                pipeline_type,
+                ComputePipelineEntry {
+                    pipeline: Arc::new(pipeline),
+                    layout: Arc::new(layout),
+                    bind_group_layout: bind_group_layouts
+                        .get(&pipeline_type)
+                        .expect("just inserted")
+                        .clone(),
+                },
+            );
         }
         
         Self { device, pipelines, bind_group_layouts }
@@ -82,7 +92,7 @@ impl ComputePipeline {
                 wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
             ],
             ComputePipelineType::Waveform | ComputePipelineType::Histogram | ComputePipelineType::Vectorscope => vec![
-                wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::StorageBuffer { read_only: false, has_dynamic_offset: false, min_binding_size: None }, count: None },
+                wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Texture { multisampled: false, view_dimension: wgpu::TextureViewDimension::D2, sample_type: wgpu::TextureSampleType::Float { filterable: true } }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
             ],
@@ -120,47 +130,45 @@ impl ComputePipeline {
         params: ComputeParams,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pipeline = self.pipelines.get(&pipeline_type).ok_or("Pipeline not found")?;
-        
+
         // Create bind group
         let bind_group_layout = self.bind_group_layouts.get(&pipeline_type).unwrap();
+
+        // The uniform buffer is built here and kept alive for the pass: a
+        // `Vec<BindGroupEntry>` borrowing a local would not outlive the encoder.
+        let data = params.params;
+        let uniform = UniformBuffer::new_uniform(device, &data, Some("Compute Params"));
+
+        let entries = vec![
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&params.output.as_ref().unwrap_or(&params.input).view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&params.input.view) },
+            wgpu::BindGroupEntry { binding: 2, resource: uniform.as_entire_binding() },
+        ];
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(&format!("{:?} Compute Bind Group", pipeline_type)),
             layout: bind_group_layout,
-            entries: &params.bind_group_entries(),
+            entries: &entries,
         });
-        
+
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Compute Encoder") });
-        
+
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some(&format!("{:?} Pass", pipeline_type)), timestamp_writes: None });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            
+
             let (width, height) = params.input.size();
             let workgroups_x = (width + 15) / 16;
             let workgroups_y = (height + 15) / 16;
             compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
-        
+
         queue.submit(Some(encoder.finish()));
         Ok(())
     }
 }
 
-impl ComputeParams {
-    fn bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
-        vec![
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.output.as_ref().unwrap_or(&self.input).view) },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.input.view) },
-            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Buffer(self.create_uniform_buffer().as_entire_binding()) },
-        ]
-    }
-    
-    fn create_uniform_buffer(&self) -> UniformBuffer {
-        // Would create uniform buffer from params
-        unimplemented!()
-    }
-}
 
 const THUMBNAIL_SHADER: &str = r#"
 @group(0) @binding(0) var outputTexture: texture_storage_2d<rgba8unorm, write>;

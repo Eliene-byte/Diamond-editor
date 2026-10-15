@@ -7,7 +7,7 @@ use crate::gpu::renderer::RenderCommand;
 use std::collections::HashMap;
 
 /// Generator types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GeneratorType {
     SolidColor,
     Gradient,
@@ -124,7 +124,7 @@ impl Generator {
             (color.3 * 255.0) as u8,
         ].repeat((width * height) as usize);
         
-        texture_manager.upload(&data, width, height, crate::core::types::PixelFormat::Rgba8)
+        texture_manager.upload(&data, width, height, crate::core::color::PixelFormat::Rgba8)
     }
 
     fn render_gradient(&self, texture_manager: &mut TextureManager, width: u32, height: u32) -> GpuTexture {
@@ -170,7 +170,7 @@ impl Generator {
             }
         }
         
-        texture_manager.upload(&data, width, height, crate::core::types::PixelFormat::Rgba8)
+        texture_manager.upload(&data, width, height, crate::core::color::PixelFormat::Rgba8)
     }
 
     fn render_bars(&self, texture_manager: &mut TextureManager, frame: Frame, width: u32, height: u32) -> GpuTexture {
@@ -200,7 +200,7 @@ impl Generator {
             }
         }
         
-        texture_manager.upload(&data, width, height, crate::core::types::PixelFormat::Rgba8)
+        texture_manager.upload(&data, width, height, crate::core::color::PixelFormat::Rgba8)
     }
 
     fn render_timecode(&self, texture_manager: &mut TextureManager, frame: Frame, width: u32, height: u32) -> GpuTexture {
@@ -229,7 +229,7 @@ impl Generator {
         let mut data = Vec::with_capacity((width * height * 4) as usize);
         
         for _ in 0..(width * height) {
-            let v = rng.random::<f32>() * scale;
+            let v = rng.gen::<f32>() * scale;
             let val = (v.clamp(0.0, 1.0) * 255.0) as u8;
             data.push(val);
             data.push(val);
@@ -237,7 +237,7 @@ impl Generator {
             data.push(255);
         }
         
-        texture_manager.upload(&data, width, height, crate::core::types::PixelFormat::Rgba8)
+        texture_manager.upload(&data, width, height, crate::core::color::PixelFormat::Rgba8)
     }
 
     fn render_plasma(&self, texture_manager: &mut TextureManager, frame: Frame, width: u32, height: u32) -> GpuTexture {
@@ -274,7 +274,7 @@ impl Generator {
             }
         }
         
-        texture_manager.upload(&data, width, height, crate::core::types::PixelFormat::Rgba8)
+        texture_manager.upload(&data, width, height, crate::core::color::PixelFormat::Rgba8)
     }
 
     fn render_checkerboard(&self, texture_manager: &mut TextureManager, width: u32, height: u32) -> GpuTexture {
@@ -303,7 +303,7 @@ impl Generator {
             }
         }
         
-        texture_manager.upload(&data, width, height, crate::core::types::PixelFormat::Rgba8)
+        texture_manager.upload(&data, width, height, crate::core::color::PixelFormat::Rgba8)
     }
 }
 

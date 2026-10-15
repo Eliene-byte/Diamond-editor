@@ -1,4 +1,5 @@
 //! Edit page - main professional editing page
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -86,64 +87,75 @@ impl EditPage {
         }
     }
 
-    fn default_layout(&mut self, ctx: &LayoutContext) -> Box<dyn Widget> {
-        Box::new(Flex::new(Direction::Vertical)
-            .child(Box::new(self.top_bar.clone()))
-            .child(Box::new(Flex::new(Direction::Horizontal)
-                // Left: Media pool + Source viewer
-                .child(Box::new(Flex::new(Direction::Vertical)
-                    .child(Box::new(self.media_pool_area.clone()))
-                    .child(Box::new(self.source_viewer.clone()))
-                    .flex_grow(1.0)
-                ).flex_basis(320.0))
-                
-                // Center: Timeline viewer + Timeline
-                .child(Box::new(Flex::new(Direction::Vertical)
-                    .child(Box::new(self.timeline_viewer.clone()))
-                    .child(Box::new(self.timeline_area.clone()))
-                    .flex_grow(1.0)
-                ).flex_grow(1.0))
-                
-                // Right: Inspector/Mixer/Effects
-                .child(Box::new(Flex::new(Direction::Vertical)
-                    .child(Box::new(self.side_panel_tabs()))
-                    .child(Box::new(self.active_panel_widget()))
-                    .flex_grow(1.0)
-                ).flex_basis(300.0))
-            ).flex_grow(1.0))
+    fn default_layout(&mut self, _ctx: &LayoutContext) -> Box<dyn Widget> {
+        // Left: Media pool + Source viewer
+        let left = Flex::new(Direction::Vertical)
+            .child(Box::new(self.media_pool_area.clone()))
+            .child(Box::new(self.source_viewer.clone()))
+            .flex_grow(1.0);
+
+        // Center: Timeline viewer + Timeline
+        let center = Flex::new(Direction::Vertical)
+            .child(Box::new(self.timeline_viewer.clone()))
+            .child(Box::new(self.timeline_area.clone()))
+            .flex_grow(1.0);
+
+        // Right: Inspector/Mixer/Effects
+        let right = Flex::new(Direction::Vertical)
+            .child(self.side_panel_tabs())
+            .child(self.active_panel_widget())
+            .flex_grow(1.0);
+
+        let body = Flex::new(Direction::Horizontal)
+            .child(Box::new(left).flex_basis(320.0))
+            .child(Box::new(center).flex_grow(1.0))
+            .child(Box::new(right).flex_basis(300.0))
+            .flex_grow(1.0);
+
+        Box::new(
+            Flex::new(Direction::Vertical)
+                .child(Box::new(self.top_bar.clone()))
+                .child(Box::new(body)),
         )
     }
 
-    fn dual_viewer_layout(&mut self, ctx: &LayoutContext) -> Box<dyn Widget> {
-        Box::new(Flex::new(Direction::Vertical)
-            .child(Box::new(self.top_bar.clone()))
-            .child(Box::new(Flex::new(Direction::Horizontal)
-                .child(Box::new(self.source_viewer.clone()).flex_grow(1.0))
-                .child(Box::new(self.timeline_viewer.clone()).flex_grow(1.0))
-            ).flex_basis(400.0))
+    fn dual_viewer_layout(&mut self, _ctx: &LayoutContext) -> Box<dyn Widget> {
+        let viewers = Flex::new(Direction::Horizontal)
+            .child(Box::new(self.source_viewer.clone()).flex_grow(1.0))
+            .child(Box::new(self.timeline_viewer.clone()).flex_grow(1.0));
+
+        Box::new(
+            Flex::new(Direction::Vertical)
+                .child(Box::new(self.top_bar.clone()))
+                .child(Box::new(viewers).flex_basis(400.0))
+                .child(Box::new(self.timeline_area.clone()).flex_grow(1.0)),
+        )
+    }
+
+    fn single_viewer_layout(&mut self, _ctx: &LayoutContext) -> Box<dyn Widget> {
+        let left = Flex::new(Direction::Vertical)
+            .child(Box::new(self.media_pool_area.clone()))
+            .child(Box::new(self.timeline_viewer.clone()))
+            .flex_grow(1.0);
+
+        let body = Flex::new(Direction::Horizontal)
+            .child(Box::new(left).flex_basis(320.0))
             .child(Box::new(self.timeline_area.clone()).flex_grow(1.0))
+            .child(self.active_panel_widget()).flex_basis(300.0)
+            .flex_grow(1.0);
+
+        Box::new(
+            Flex::new(Direction::Vertical)
+                .child(Box::new(self.top_bar.clone()))
+                .child(Box::new(body)),
         )
     }
 
-    fn single_viewer_layout(&mut self, ctx: &LayoutContext) -> Box<dyn Widget> {
-        Box::new(Flex::new(Direction::Vertical)
-            .child(Box::new(self.top_bar.clone()))
-            .child(Box::new(Flex::new(Direction::Horizontal)
-                .child(Box::new(Flex::new(Direction::Vertical)
-                    .child(Box::new(self.media_pool_area.clone()))
-                    .child(Box::new(self.timeline_viewer.clone()))
-                    .flex_grow(1.0)
-                ).flex_basis(320.0))
-                .child(Box::new(self.timeline_area.clone()).flex_grow(1.0))
-                .child(Box::new(self.active_panel_widget()).flex_basis(300.0))
-            ).flex_grow(1.0))
-        )
-    }
-
-    fn full_timeline_layout(&mut self, ctx: &LayoutContext) -> Box<dyn Widget> {
-        Box::new(Flex::new(Direction::Vertical)
-            .child(Box::new(self.top_bar.clone()))
-            .child(Box::new(self.timeline_area.clone()).flex_grow(1.0))
+    fn full_timeline_layout(&mut self, _ctx: &LayoutContext) -> Box<dyn Widget> {
+        Box::new(
+            Flex::new(Direction::Vertical)
+                .child(Box::new(self.top_bar.clone()))
+                .child(Box::new(self.timeline_area.clone()).flex_grow(1.0)),
         )
     }
 
@@ -197,7 +209,7 @@ impl MediaPoolArea {
 
 impl Widget for MediaPoolArea {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) { (320.0, 400.0) }
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) { self.pool_widget.layout(ctx, rect); }
+    fn layout(&mut self, ctx: &LayoutContext, rect: Rect) { self.pool_widget.layout(ctx, rect); }
     fn draw(&self, ctx: &DrawContext, rect: Rect) { self.pool_widget.draw(ctx, rect); }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool { self.pool_widget.handle_input(ctx, event) }
     fn as_any(&self) -> &dyn std::any::Any { self }
@@ -216,7 +228,7 @@ impl TimelineArea {
 
 impl Widget for TimelineArea {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) { (f32::INFINITY, 400.0) }
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) { self.timeline_widget.layout(ctx, rect); }
+    fn layout(&mut self, ctx: &LayoutContext, rect: Rect) { self.timeline_widget.layout(ctx, rect); }
     fn draw(&self, ctx: &DrawContext, rect: Rect) { self.timeline_widget.draw(ctx, rect); }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool { self.timeline_widget.handle_input(ctx, event) }
     fn as_any(&self) -> &dyn std::any::Any { self }
@@ -227,29 +239,35 @@ impl Widget for TimelineArea {
 struct TabButton {
     label: String,
     active: bool,
-    on_click: Box<dyn Fn() + Send + Sync>,
+    on_click: std::sync::Arc<dyn Fn() + Send + Sync>,
+    rect: Rect,
 }
 
 impl TabButton {
     fn new(label: impl Into<String>, active: bool, on_click: impl Fn() + Send + Sync + 'static) -> Self {
-        Self { label: label.into(), active, on_click: Box::new(on_click) }
+        Self {
+            label: label.into(),
+            active,
+            on_click: std::sync::Arc::new(on_click),
+            rect: Rect::new(0.0, 0.0, 0.0, 0.0),
+        }
     }
 }
 
 impl Widget for TabButton {
     fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        let (w, h) = ctx.text_renderer.measure_text(&self.label, ctx.theme.font_size_sm);
+        let (w, h) = ctx.measure_text(&self.label, ctx.theme.font_size_sm);
         (w + 24.0, h + 12.0)
     }
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {}
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) { self.rect = rect; }
     fn draw(&self, ctx: &DrawContext, rect: Rect) {
         let bg = if self.active { ctx.theme.bg_selected } else { ctx.theme.bg_secondary };
         ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad { color: bg, rect: [rect.x, rect.y, rect.w, rect.h] });
         ctx.text_renderer.draw_text(&self.label, Point2::new(rect.x + rect.w * 0.5, rect.y + rect.h * 0.5), ctx.theme.font_size_sm, ctx.theme.text_primary);
     }
-    fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
+    fn handle_input(&mut self, _ctx: &InputContext, event: InputEvent) -> bool {
         if let InputEvent::Click(pos) = event {
-            if pos.x >= self.rect.x && pos.x < self.rect.x + self.rect.w && pos.y >= self.rect.y && pos.y < self.rect.y + self.rect.h {
+            if event.hits(self.rect) {
                 (self.on_click)();
                 return true;
             }

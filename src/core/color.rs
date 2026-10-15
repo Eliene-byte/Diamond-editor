@@ -4,7 +4,7 @@
 use std::fmt;
 
 /// Color space / transfer function
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ColorSpace {
     // Scene-referred
     Linear,
@@ -123,7 +123,7 @@ pub enum TransferFunction {
 }
 
 /// Pixel format / bit depth
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PixelFormat {
     // 8-bit
     Rgb8,
@@ -369,7 +369,7 @@ impl Cdl {
 /// Color grade node (for node-based grading)
 #[derive(Debug, Clone)]
 pub struct GradeNode {
-    pub id: crate::id::GradeNodeId,
+    pub id: crate::core::id::GradeNodeId,
     pub enabled: bool,
     pub label: String,
     pub color_space: ColorSpace,
@@ -425,7 +425,7 @@ pub enum BlurShape {
     Variable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Curve {
     pub points: Vec<(f32, f32)>, // (input, output) 0-1
     pub interpolation: CurveInterp,
@@ -460,7 +460,7 @@ pub struct WindowTransform {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TrackPoint {
-    pub frame: crate::time::Frame,
+    pub frame: crate::core::time::Frame,
     pub position: (f32, f32),
     pub scale: (f32, f32),
     pub rotation: f32,
@@ -480,7 +480,7 @@ pub struct ScopesData {
     pub parade: Vec<f32>,       // 256 * 3
     pub vectorscope: Vec<f32>,  // 256 * 256
     pub histogram: Vec<f32>,    // 256 * 4 (RGB + Luma)
-    pub frame: crate::time::Frame,
+    pub frame: crate::core::time::Frame,
 }
 
 impl ScopesData {
@@ -490,7 +490,7 @@ impl ScopesData {
             parade: vec![0.0; 256 * 3],
             vectorscope: vec![0.0; 256 * 256],
             histogram: vec![0.0; 256 * 4],
-            frame: crate::time::Frame::ZERO,
+            frame: crate::core::time::Frame::ZERO,
         }
     }
 }

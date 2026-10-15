@@ -1,4 +1,5 @@
 //! Audio mixer widget
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -7,6 +8,7 @@ use crate::timeline::clip::Timeline;
 use crate::core::id::{TrackId, AudioBusId};
 use std::sync::{Arc, RwLock};
 
+#[derive(Clone)]
 pub struct AudioMixerWidget {
     timeline: Option<Arc<RwLock<Timeline>>>,
     channels: Vec<MixerChannel>,
@@ -91,42 +93,7 @@ impl AudioMixerWidget {
     }
 }
 
-impl Widget for AudioMixerWidget {
-    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        let channel_width = 80.0;
-        let width = (self.channels.len() + 1) as f32 * channel_width + 100.0; // + master
-        (width, 600.0)
-    }
-
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
-        self.rect = rect;
-    }
-
-    fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        // Background
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_primary,
-            rect: [rect.x, rect.y, rect.w, rect.h],
-        });
-
-        let channel_width = 80.0;
-        let channel_height = rect.h - 100.0;
-        let start_x = rect.x + 10.0;
-        let start_y = rect.y + 10.0;
-
-        // Draw audio channels
-        for (i, channel) in self.channels.iter().enumerate() {
-            self.draw_channel(ctx, channel, start_x + i as f32 * channel_width, start_y, channel_width, channel_height);
-        }
-
-        // Master channel
-        let master_x = start_x + self.channels.len() as f32 * channel_width + 10.0;
-        self.draw_channel(ctx, &self.master_channel, master_x, start_y, 100.0, channel_height);
-
-        // Meter bridge at top
-        self.draw_meter_bridge(ctx, rect);
-    }
-
+impl AudioMixerWidget {
     fn draw_channel(&self, ctx: &DrawContext, channel: &MixerChannel, x: f32, y: f32, w: f32, h: f32) {
         let channel_rect = Rect::new(x, y, w, h);
         
@@ -261,7 +228,45 @@ impl Widget for AudioMixerWidget {
         
         ctx.text_renderer.draw_text("MASTER", Point2::new(meter_x - 60.0, meter_y + 16.0), ctx.theme.font_size_sm, ctx.theme.text_primary);
     }
+}
 
+impl Widget for AudioMixerWidget {
+
+    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
+        let channel_width = 80.0;
+        let width = (self.channels.len() + 1) as f32 * channel_width + 100.0; // + master
+        (width, 600.0)
+    }
+
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
+        self.rect = rect;
+    }
+
+    fn draw(&self, ctx: &DrawContext, rect: Rect) {
+        // Background
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_primary,
+            rect: [rect.x, rect.y, rect.w, rect.h],
+        });
+
+        let channel_width = 80.0;
+        let channel_height = rect.h - 100.0;
+        let start_x = rect.x + 10.0;
+        let start_y = rect.y + 10.0;
+
+        // Draw audio channels
+        for (i, channel) in self.channels.iter().enumerate() {
+            self.draw_channel(ctx, channel, start_x + i as f32 * channel_width, start_y, channel_width, channel_height);
+        }
+
+        // Master channel
+        let master_x = start_x + self.channels.len() as f32 * channel_width + 10.0;
+        self.draw_channel(ctx, &self.master_channel, master_x, start_y, 100.0, channel_height);
+
+        // Meter bridge at top
+        self.draw_meter_bridge(ctx, rect);
+
+    }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         match event {
             InputEvent::MouseDown(pos, _) => {

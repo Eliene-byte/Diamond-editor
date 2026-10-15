@@ -1,6 +1,7 @@
 //! Audio DSP - filters, dynamics, EQ, etc.
 
 /// Biquad filter - 2nd order IIR filter
+#[derive(Debug, Clone)]
 pub struct Biquad {
     a0: f32, a1: f32, a2: f32,
     b1: f32, b2: f32,
@@ -151,6 +152,7 @@ impl Biquad {
 }
 
 /// Delay line
+#[derive(Debug, Clone)]
 pub struct DelayLine {
     buffer: Vec<f32>,
     write_pos: usize,
@@ -191,6 +193,7 @@ impl DelayLine {
 }
 
 /// Compressor
+#[derive(Debug, Clone)]
 pub struct Compressor {
     threshold: f32,
     ratio: f32,
@@ -247,6 +250,7 @@ impl Compressor {
 }
 
 /// Gate/Expander
+#[derive(Debug, Clone)]
 pub struct Gate {
     threshold: f32,
     ratio: f32,
@@ -292,6 +296,7 @@ impl Gate {
 }
 
 /// Limiter
+#[derive(Debug, Clone)]
 pub struct Limiter {
     threshold: f32,
     release: f32,
@@ -328,6 +333,7 @@ impl Limiter {
 }
 
 /// Parametric EQ
+#[derive(Debug, Clone)]
 pub struct EQ {
     bands: Vec<EQBand>,
     sample_rate: u32,
@@ -343,8 +349,9 @@ struct EQBand {
     filter_type: FilterType,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FilterType { Peak, LowShelf, HighShelf, LowPass, HighPass, Notch }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FilterType {
+    #[default] Peak, LowShelf, HighShelf, LowPass, HighPass, Notch }
 
 impl EQ {
     pub fn new(sample_rate: u32) -> Self {
@@ -394,6 +401,7 @@ impl EQ {
 }
 
 /// Audio analyzer
+#[derive(Debug, Clone)]
 pub struct Analyzer {
     rms: f32,
     peak: f32,

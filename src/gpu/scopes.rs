@@ -29,7 +29,7 @@ pub enum ScopeMode {
 impl ScopesRenderer {
     /// `queue` is passed in explicitly: `wgpu::Device` has no `queue()` accessor.
     pub fn new(device: Arc<Device>, queue: Arc<Queue>) -> Self {
-        let texture_manager = TextureManager::new(device.clone(), queue);
+        let texture_manager = TextureManager::new(device.clone(), queue.clone());
         
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Scopes Bind Group Layout"),

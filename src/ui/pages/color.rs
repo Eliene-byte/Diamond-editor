@@ -1,4 +1,5 @@
 //! Color page - professional color grading
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -38,8 +39,8 @@ impl ColorPage {
     pub fn set_timeline(&mut self, timeline: Arc<RwLock<Timeline>>) {
         self.timeline = Some(timeline.clone());
         self.timeline_widget.set_timeline(timeline.clone());
-        self.viewer.set_timeline(timeline);
-        self.node_graph.set_timeline(timeline);
+        self.viewer.set_timeline(timeline.clone());
+        self.node_graph.set_timeline(timeline.clone());
     }
 
     pub fn ui(&mut self, ctx: &LayoutContext) -> Box<dyn Widget> {

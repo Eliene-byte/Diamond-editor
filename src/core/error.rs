@@ -56,6 +56,11 @@ pub enum AppError {
     #[error("Out of memory")]
     OutOfMemory,
 
+    /// Wraps an error from a layer with no dedicated variant, so `?` keeps
+    /// working across module boundaries.
+    #[error("{0}")]
+    Other(String),
+
     #[error("Cancelled")]
     Cancelled,
 
@@ -129,6 +134,12 @@ pub enum TimelineError {
 
     #[error("Invalid trim: {0}")]
     InvalidTrim(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+
+    #[error("Read-only: {0}")]
+    ReadOnly(String),
 
     #[error("Invalid split: {0}")]
     InvalidSplit(String),
@@ -360,6 +371,38 @@ pub enum CacheError {
 
     #[error("Cache size limit exceeded")]
     SizeLimitExceeded,
+
+    #[error("Disk cache is disabled")]
+    Disabled,
+
+    #[error("Compression failed: {0}")]
+    Compress(String),
+
+    #[error("Decompression failed: {0}")]
+    Decompress(String),
+
+    /// Wraps an error from a layer that does not have a dedicated variant, so
+    /// `?` keeps working across module boundaries without matching on strings.
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<Box<dyn std::error::Error>> for AppError {
+    fn from(e: Box<dyn std::error::Error>) -> Self {
+        AppError::Other(e.to_string())
+    }
+}
+
+impl From<winit::error::EventLoopError> for AppError {
+    fn from(e: winit::error::EventLoopError) -> Self {
+        AppError::Other(format!("winit event loop: {e}"))
+    }
+}
+
+impl From<winit::error::OsError> for AppError {
+    fn from(e: winit::error::OsError) -> Self {
+        AppError::Other(format!("winit os error: {e}"))
+    }
 }
 
 #[derive(Error, Debug)]

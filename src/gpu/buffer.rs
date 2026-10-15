@@ -6,7 +6,8 @@ use wgpu::util::DeviceExt;
 use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
 
-/// Typed GPU buffer
+/// Typed GPU buffer. Cloning is cheap: the underlying wgpu buffer is shared.
+#[derive(Debug, Clone)]
 pub struct GpuBuffer<T: Pod> {
     buffer: Arc<Buffer>,
     size: usize,
@@ -215,6 +216,26 @@ pub struct ColorGradeUniforms {
     pub midtones: [f32; 4],
     pub highlights: [f32; 4],
     pub _padding: [f32; 3],
+}
+
+impl Default for ColorGradeUniforms {
+    fn default() -> Self {
+        Self {
+            lift: [0.0; 4],
+            gamma: [1.0; 4],
+            gain: [1.0; 4],
+            offset: [0.0; 4],
+            contrast: 1.0,
+            pivot: 0.18,
+            saturation: 1.0,
+            temperature: 0.0,
+            tint: 0.0,
+            shadows: [0.0; 4],
+            midtones: [0.0; 4],
+            highlights: [0.0; 4],
+            _padding: [0.0; 3],
+        }
+    }
 }
 
 /// Scopes uniforms

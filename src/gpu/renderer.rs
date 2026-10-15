@@ -1,8 +1,10 @@
 //! Main GPU renderer with CPU fallback
 
-use crate::core::types::{Resolution, PixelFormat, ColorSpace, FrameRate};
+use crate::core::types::Resolution;
+use crate::core::types::FrameRate;
+use crate::core::color::{ColorSpace, PixelFormat};
 use crate::core::time::Frame;
-use crate::gpu::pipeline::{PipelineManager, RenderPipeline};
+use crate::gpu::pipeline::{PipelineManager, RenderPipelineBundle};
 use crate::gpu::texture::{TextureManager, GpuTexture};
 use crate::gpu::buffer::{BufferManager, UniformBuffer};
 use crate::gpu::color::ColorPipeline;
@@ -80,7 +82,7 @@ pub struct CompositeLayer {
 // convenience because most renderer code refers to it alongside these commands.
 pub use crate::gpu::buffer::ColorGradeUniforms;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ComputePipelineType {
     Thumbnail,
     Waveform,
@@ -297,19 +299,19 @@ impl GpuRenderer {
         self.backend
     }
 
-    pub fn configure_surface(&self, surface: Surface<'static>, width: u32, height: u32) {
+    pub fn configure_surface(&mut self, surface: Surface<'static>, width: u32, height: u32) {
         let mut config = self.config.write();
         config.width = width;
         config.height = height;
         surface.configure(&self.device, &config);
-        *self.surface.write() = Some(surface);
+        self.surface = Some(surface);
     }
 
     pub fn resize(&self, width: u32, height: u32) {
         let mut config = self.config.write();
         config.width = width;
         config.height = height;
-        if let Some(surface) = &*self.surface.read() {
+        if let Some(surface) = &self.surface {
             surface.configure(&self.device, &config);
         }
     }
@@ -327,7 +329,7 @@ impl GpuRenderer {
         }
         
         // Get surface texture
-        let surface_texture = if let Some(surface) = &*self.surface.read() {
+        let surface_texture = if let Some(surface) = &self.surface {
             surface.get_current_texture().ok()
         } else {
             None

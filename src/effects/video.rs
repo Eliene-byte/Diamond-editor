@@ -167,7 +167,7 @@ impl VideoEffect {
             Easing::EaseIn => t * t * t,
             Easing::EaseOut => 1.0 - (1.0 - t).powi(3),
             Easing::EaseInOut => if t < 0.5 { 4.0 * t * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0 },
-            Easing::Custom(x1, y1, x2, y2) => Self::cubic_bezier(t, *x1, *y1, *x2, *y2),
+            Easing::Custom(x1, y1, x2, y2) => Self::cubic_bezier(t, x1, y1, x2, y2),
         }
     }
 
@@ -193,6 +193,11 @@ struct EffectPipeline {
 impl VideoEffectRenderer {
     pub fn new(renderer: GpuRenderer, texture_manager: TextureManager) -> Self {
         Self { renderer, texture_manager, pipelines: HashMap::new() }
+    }
+
+    /// Allocate a scratch texture for an intermediate effect pass.
+    pub fn alloc_texture(&mut self, width: u32, height: u32) -> GpuTexture {
+        self.texture_manager.create_render_target(width, height)
     }
 
     pub fn apply(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
@@ -250,7 +255,7 @@ impl VideoEffectRenderer {
         // Use compute pipeline
         self.renderer.submit(RenderCommand::Compute { 
             pipeline: ComputePipelineType::Stabilize, 
-            params: ComputeParams { input: input.clone(), output: Some(output.clone()), params: [0.0; 16] } 
+            params: ComputeParams { input: (*input).clone(), output: Some((*output).clone()), params: [0.0; 16] } 
         });
         Ok(())
     }
@@ -308,19 +313,24 @@ impl EffectStack {
 
     pub fn render(&mut self, input: &GpuTexture, output: &GpuTexture, renderer: &mut VideoEffectRenderer) -> Result<(), Box<dyn std::error::Error>> {
         if self.effects.is_empty() { return Ok(()); }
-        
+
         let mut current_input = input.clone();
-        
+
         for (i, effect) in self.effects.iter().enumerate() {
             let is_last = i == self.effects.len() - 1;
-            let current_output = if is_last { output.clone() } else { 
-                self.texture_manager.create_render_target(current_input.width, current_input.height) 
-            };
-            
-            renderer.apply(&current_input, effect, &current_output)?;
-            current_input = current_output;
+            if is_last {
+                renderer.apply(&current_input, effect, output)?;
+                break;
+            }
+
+            // Intermediate stages render into a scratch texture. The stack has no
+            // texture manager of its own, so it allocates through the GPU renderer
+            // the caller already owns instead of growing an unbounded pool.
+            let scratch = renderer.alloc_texture(current_input.width, current_input.height);
+            renderer.apply(&current_input, effect, &scratch)?;
+            current_input = scratch;
         }
-        
+
         Ok(())
     }
 }

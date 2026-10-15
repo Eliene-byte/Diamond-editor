@@ -466,9 +466,41 @@ impl Timeline {
         self.items.get_mut(&item_id)
     }
 
-    /// Look up an item by the slotmap key stored in the track item maps.
-    pub(crate) fn item_by_key(&self, key: TrackItemKey) -> Option<&TrackItem> {
+    /// Look a timeline item up by its slot key.
+    pub fn item_by_key(&self, key: TrackItemKey) -> Option<&TrackItem> {
         self.items.values().find(|item| item.key == key)
+    }
+
+    /// Iterate every item in the timeline, in slotmap order.
+    pub fn iter_items(&self) -> impl Iterator<Item = &TrackItem> {
+        self.items.values()
+    }
+
+    /// Re-key `item_id` inside its track's item map.
+    ///
+    /// Track item maps are keyed by timeline start frame, so any operation that
+    /// moves an item has to update both the item's range and this index. Doing it
+    /// here keeps callers from holding an item borrow while reaching for the
+    /// track, which the borrow checker rightly rejects.
+    pub fn reindex_item(&mut self, track_id: TrackId, item_id: TrackItemId) {
+        let (key, new_in) = match self.items.get(&item_id) {
+            Some(item) => (item.key, item.timeline_in()),
+            None => return,
+        };
+
+        let track = if let Some(t) = self.tracks.get_video_track_mut(track_id) {
+            Some(t as &mut dyn TrackItemsMut)
+        } else if let Some(t) = self.tracks.get_audio_track_mut(track_id) {
+            Some(t as &mut dyn TrackItemsMut)
+        } else {
+            self.tracks.get_subtitle_track_mut(track_id).map(|t| t as &mut dyn TrackItemsMut)
+        };
+
+        if let Some(track) = track {
+            let items = track.items_mut();
+            items.retain(|_, k| *k != key);
+            items.insert(new_in, key);
+        }
     }
 
     pub fn items_at_frame(&self, frame: Frame) -> Vec<&TrackItem> {

@@ -1,4 +1,5 @@
 //! Viewer widget - source, timeline, color, fusion, fairlight, deliver viewers
+use crate::core::math::{Rect, Point2};
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -18,6 +19,7 @@ pub enum ViewerMode {
     Deliver,
 }
 
+#[derive(Clone)]
 pub struct ViewerWidget {
     mode: ViewerMode,
     timeline: Option<Arc<RwLock<Timeline>>>,
@@ -91,51 +93,7 @@ impl ViewerWidget {
     }
 }
 
-impl Widget for ViewerWidget {
-    fn measure(&self, ctx: &LayoutContext, constraints: Constraints) -> (f32, f32) {
-        let w = constraints.max_width.min(1920.0).max(320.0);
-        let h = w * 9.0 / 16.0;
-        (w, h)
-    }
-
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
-        self.rect = rect;
-    }
-
-    fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        // Background
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad { 
-            color: ctx.theme.bg_primary, 
-            rect: [rect.x, rect.y, rect.w, rect.h] 
-        });
-
-        // Draw video texture if available
-        if let Some(texture) = &self.texture {
-            let (tw, th) = (texture.width as f32, texture.height as f32);
-            let scale = (rect.w / tw).min(rect.h / th) * self.zoom;
-            let dw = tw * scale;
-            let dh = th * scale;
-            let dx = rect.x + (rect.w - dw) * 0.5 + self.pan.0;
-            let dy = rect.y + (rect.h - dh) * 0.5 + self.pan.1;
-            
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawTexture {
-                texture: texture.clone(),
-                dest_rect: [dx, dy, dw, dh],
-                src_rect: [0.0, 0.0, 1.0, 1.0],
-                opacity: 1.0,
-                blend_mode: crate::gpu::renderer::BlendMode::Normal,
-            });
-        }
-
-        // Overlays
-        if self.show_overlays {
-            self.draw_overlays(ctx, rect);
-        }
-
-        // Timecode display
-        self.draw_timecode(ctx, rect);
-    }
-
+impl ViewerWidget {
     fn draw_overlays(&self, ctx: &DrawContext, rect: Rect) {
         if self.show_safe_areas {
             // Action safe (90%)
@@ -192,6 +150,53 @@ impl Widget for ViewerWidget {
         let frame_text = format!("{}f", self.current_frame.0);
         ctx.text_renderer.draw_text(&frame_text, Point2::new(rect.x + rect.w - 100.0, rect.y + 20.0), ctx.theme.font_size_sm, ctx.theme.text_secondary);
     }
+}
+
+impl Widget for ViewerWidget {
+    fn measure(&self, ctx: &LayoutContext, constraints: Constraints) -> (f32, f32) {
+        let w = constraints.max_width.min(1920.0).max(320.0);
+        let h = w * 9.0 / 16.0;
+        (w, h)
+    }
+
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
+        self.rect = rect;
+    }
+
+    fn draw(&self, ctx: &DrawContext, rect: Rect) {
+        // Background
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_primary,
+            rect: [rect.x, rect.y, rect.w, rect.h]
+        });
+
+        // Draw video texture if available
+        if let Some(texture) = &self.texture {
+            let (tw, th) = (texture.width as f32, texture.height as f32);
+            let scale = (rect.w / tw).min(rect.h / th) * self.zoom;
+            let dw = tw * scale;
+            let dh = th * scale;
+            let dx = rect.x + (rect.w - dw) * 0.5 + self.pan.0;
+            let dy = rect.y + (rect.h - dh) * 0.5 + self.pan.1;
+            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawTexture {
+                texture: texture.clone(),
+                dest_rect: [dx, dy, dw, dh],
+                src_rect: [0.0, 0.0, 1.0, 1.0],
+                opacity: 1.0,
+                blend_mode: crate::gpu::renderer::BlendMode::Normal,
+            });
+        } else {
+            ctx.text_renderer.draw_text("No media loaded", Point2::new(rect.x + 10.0, rect.y + 10.0), ctx.theme.font_size_sm, ctx.theme.text_secondary);
+        }
+
+        // Overlays
+        if self.show_overlays {
+            self.draw_overlays(ctx, rect);
+        }
+
+        // Timecode display
+        self.draw_timecode(ctx, rect);
+    }
 
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         match event {
@@ -205,13 +210,14 @@ impl Widget for ViewerWidget {
                 if pos.x >= self.rect.x && pos.x < self.rect.x + self.rect.w && pos.y >= self.rect.y && pos.y < self.rect.y + self.rect.h {
                     match btn {
                         MouseButton::Left => {
-                            // Set playhead position
-                            if let Some(timeline) = &self.timeline {
-                                if let Ok(tl) = timeline.read() {
-                                    let rel_x = (pos.x - self.rect.x) / self.rect.w;
-                                    let frame = Frame((rel_x * tl.duration.0 as f32) as i64);
-                                    self.set_frame(frame);
-                                }
+                            // Set playhead position. Read the duration out of the
+                            // guard before mutating self, so the two borrows do
+                            // not overlap.
+                            let duration = self.timeline.as_ref().and_then(|t| t.read().ok()).map(|tl| tl.duration);
+                            if let Some(duration) = duration {
+                                let rel_x = (pos.x - self.rect.x) / self.rect.w;
+                                let frame = Frame((rel_x * duration.0 as f32) as i64);
+                                self.set_frame(frame);
                             }
                             true
                         }
@@ -243,11 +249,10 @@ impl Widget for ViewerWidget {
                     Key::Up => { self.step_frame(-10); true }
                     Key::Down => { self.step_frame(10); true }
                     Key::Home => { self.set_frame(Frame::ZERO); true }
-                    Key::End => { 
-                        if let Some(timeline) = &self.timeline {
-                            if let Ok(tl) = timeline.read() {
-                                self.set_frame(tl.duration);
-                            }
+                    Key::End => {
+                        let duration = self.timeline.as_ref().and_then(|t| t.read().ok()).map(|tl| tl.duration);
+                        if let Some(duration) = duration {
+                            self.set_frame(duration);
                         }
                         true
                     }
@@ -258,11 +263,13 @@ impl Widget for ViewerWidget {
         }
     }
 
+    fn as_any(&self) -> &dyn std::any::Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+}
+
+impl ViewerWidget {
     fn step_frame(&mut self, delta: i64) {
         let new_frame = Frame((self.current_frame.0 + delta).max(0));
         self.set_frame(new_frame);
     }
-
-    fn as_any(&self) -> &dyn std::any::Any { self }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }

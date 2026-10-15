@@ -19,32 +19,32 @@ pub enum PlaybackEvent {
 
 /// Playhead - controls timeline playback
 pub struct Playhead {
-    position: AtomicI64,
-    state: RwLock<PlaybackState>,
+    position: Arc<AtomicI64>,
+    state: Arc<RwLock<PlaybackState>>,
     frame_rate: FrameRate,
-    duration: Frame,
-    loop_range: Option<(Frame, Frame)>,
-    playback_speed: RwLock<f32>,
+    duration: RwLock<Frame>,
+    loop_range: RwLock<Option<(Frame, Frame)>>,
+    playback_speed: Arc<RwLock<f32>>,
     audio_scrub: RwLock<bool>,
     event_tx: Sender<PlaybackEvent>,
     event_rx: Receiver<PlaybackEvent>,
-    frame_timer: Option<tokio::task::JoinHandle<()>>,
+    frame_timer: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl Playhead {
     pub fn new(frame_rate: FrameRate, duration: Frame) -> Self {
         let (tx, rx) = unbounded();
         Self {
-            position: AtomicI64::new(0),
-            state: RwLock::new(PlaybackState::Stopped),
+            position: Arc::new(AtomicI64::new(0)),
+            state: Arc::new(RwLock::new(PlaybackState::Stopped)),
             frame_rate,
-            duration,
-            loop_range: None,
-            playback_speed: RwLock::new(1.0),
+            duration: RwLock::new(duration),
+            loop_range: RwLock::new(None),
+            playback_speed: Arc::new(RwLock::new(1.0)),
             audio_scrub: RwLock::new(false),
             event_tx: tx,
             event_rx: rx,
-            frame_timer: None,
+            frame_timer: parking_lot::Mutex::new(None),
         }
     }
 
@@ -53,7 +53,7 @@ impl Playhead {
     }
 
     pub fn set_position(&self, frame: Frame) {
-        let clamped = frame.0.clamp(0, self.duration.0);
+        let clamped = frame.0.clamp(0, self.duration().0);
         self.position.store(clamped, Ordering::Relaxed);
         self.emit_position();
     }
@@ -98,14 +98,14 @@ impl Playhead {
 
     pub fn set_loop_range(&self, start: Frame, end: Frame) {
         if start < end {
-            self.loop_range = Some((start, end));
+            *self.loop_range.write() = Some((start, end));
         } else {
-            self.loop_range = None;
+            *self.loop_range.write() = None;
         }
     }
 
     pub fn clear_loop(&self) {
-        self.loop_range = None;
+        *self.loop_range.write() = None;
     }
 
     pub fn set_playback_speed(&self, speed: f32) {
@@ -121,7 +121,7 @@ impl Playhead {
     }
 
     pub fn step_forward(&self, frames: i64) {
-        let new_pos = (self.position() + Frame(frames)).0.clamp(0, self.duration.0);
+        let new_pos = (self.position() + Frame(frames)).0.clamp(0, self.duration().0);
         self.set_position(Frame(new_pos));
     }
 
@@ -142,7 +142,8 @@ impl Playhead {
     }
 
     pub fn go_to_end(&self) {
-        self.set_position(self.duration);
+        let end = self.duration();
+        self.set_position(end);
     }
 
     pub fn go_to_timecode(&self, tc: Timecode) {
@@ -150,11 +151,11 @@ impl Playhead {
     }
 
     pub fn set_duration(&self, duration: Frame) {
-        self.duration = duration;
+        *self.duration.write() = duration;
     }
 
     pub fn duration(&self) -> Frame {
-        self.duration
+        *self.duration.read()
     }
 
     pub fn frame_rate(&self) -> FrameRate {
@@ -166,13 +167,14 @@ impl Playhead {
     }
 
     fn start_frame_timer(&self) {
-        if self.frame_timer.is_some() { return; }
+        if self.frame_timer.lock().is_some() { return; }
         
+        // Clone the shared handles; the data behind them is only ever read.
         let position = self.position.clone();
         let state = self.state.clone();
         let frame_rate = self.frame_rate;
-        let duration = self.duration;
-        let loop_range = self.loop_range;
+        let duration = self.duration();
+        let loop_range = *self.loop_range.read();
         let playback_speed = self.playback_speed.clone();
         let event_tx = self.event_tx.clone();
         
@@ -182,8 +184,8 @@ impl Playhead {
             loop {
                 interval.tick().await;
                 
-                let state = *state.read();
-                if state != PlaybackState::Playing { break; }
+                let current_state = *state.read();
+                if current_state != PlaybackState::Playing { break; }
                 
                 let speed = *playback_speed.read();
                 if speed == 0.0 { continue; }
@@ -215,9 +217,7 @@ impl Playhead {
                 if new_pos >= duration.0 {
                     position.store(duration.0, Ordering::Relaxed);
                     let _ = event_tx.send(PlaybackEvent::EndReached);
-                    let mut s = state.write();
-                    *s = PlaybackState::Stopped;
-                    drop(s);
+                    *state.write() = PlaybackState::Stopped;
                     let _ = event_tx.send(PlaybackEvent::StateChanged { state: PlaybackState::Stopped });
                     break;
                 }
@@ -231,11 +231,11 @@ impl Playhead {
             }
         });
         
-        self.frame_timer = Some(handle);
+        *self.frame_timer.lock() = Some(handle);
     }
 
     fn stop_frame_timer(&self) {
-        if let Some(handle) = self.frame_timer.take() {
+        if let Some(handle) = self.frame_timer.lock().take() {
             handle.abort();
         }
     }

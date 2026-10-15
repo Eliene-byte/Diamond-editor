@@ -1,4 +1,6 @@
 //! Inspector widget - clip, track, effect properties
+use crate::core::math::{Rect, Point2};
+use crate::core::types::EffectValue;
 
 use crate::ui::widgets::*;
 use crate::ui::layout::*;
@@ -11,6 +13,7 @@ use crate::core::id::{TrackItemId, ClipId, TrackId};
 use crate::core::time::Frame;
 use std::sync::{Arc, RwLock};
 
+#[derive(Clone)]
 pub struct InspectorWidget {
     timeline: Option<Arc<RwLock<Timeline>>>,
     pool: Option<Arc<RwLock<crate::media::pool::MediaPool>>>,
@@ -59,36 +62,7 @@ impl InspectorWidget {
     }
 }
 
-impl Widget for InspectorWidget {
-    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
-        (300.0, f32::INFINITY)
-    }
-
-    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
-        self.rect = rect;
-    }
-
-    fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_secondary,
-            rect: [rect.x, rect.y, rect.w, rect.h],
-        });
-
-        let mut y = rect.y + 10.0;
-        let label_w = 80.0;
-        let value_w = rect.w - label_w - 20.0;
-
-        if let Some(item_id) = self.selected_item {
-            self.draw_item_inspector(ctx, rect, &mut y, item_id);
-        } else if let Some(clip_id) = self.selected_clip {
-            self.draw_clip_inspector(ctx, rect, &mut y, clip_id);
-        } else if let Some(track_id) = self.selected_track {
-            self.draw_track_inspector(ctx, rect, &mut y, track_id);
-        } else {
-            ctx.text_renderer.draw_text("No selection", Point2::new(rect.x + 10.0, y + 20.0), ctx.theme.font_size_md, ctx.theme.text_secondary);
-        }
-    }
-
+impl InspectorWidget {
     fn draw_item_inspector(&self, ctx: &DrawContext, rect: Rect, y: &mut f32, item_id: TrackItemId) {
         if let Some(timeline) = &self.timeline {
             if let Ok(tl) = timeline.read() {
@@ -177,7 +151,7 @@ impl Widget for InspectorWidget {
                     self.draw_property(ctx, rect, y, "Duration", &tc.format());
                     
                     if let Some(res) = clip.metadata.resolution {
-                        self.draw_property(ctx, rect, y, "Resolution", &format!("{}x{}", res.0, res.1));
+                        self.draw_property(ctx, rect, y, "Resolution", &format!("{:?}", res.dimensions()));
                     }
                     
                     if let Some(fps) = clip.metadata.frame_rate {
@@ -218,20 +192,32 @@ impl Widget for InspectorWidget {
     fn draw_track_inspector(&self, ctx: &DrawContext, rect: Rect, y: &mut f32, track_id: TrackId) {
         if let Some(timeline) = &self.timeline {
             if let Ok(tl) = timeline.read() {
-                if let Some(track) = tl.tracks.get_video_track(track_id).or_else(|| tl.tracks.get_audio_track(track_id)).or_else(|| tl.tracks.get_subtitle_track(track_id)) {
+                // The three track kinds are distinct types, so resolve them one at a
+                // time instead of chaining or_else across different Option<&T>.
+                let track_name = tl
+                    .tracks
+                    .get_video_track(track_id)
+                    .map(|t| (t.name.clone(), t.enabled, t.locked, "Video"))
+                    .or_else(|| {
+                        tl.tracks
+                            .get_audio_track(track_id)
+                            .map(|t| (t.name.clone(), t.enabled, t.locked, "Audio"))
+                    })
+                    .or_else(|| {
+                        tl.tracks
+                            .get_subtitle_track(track_id)
+                            .map(|t| (t.name.clone(), t.enabled, t.locked, "Subtitle"))
+                    });
+                if let Some((name, enabled, locked, kind)) = track_name {
                     self.draw_section_header(ctx, rect, y, "TRACK");
                     
-                    self.draw_property(ctx, rect, y, "Name", &track.name);
-                    self.draw_property(ctx, rect, y, "Type", &match track {
-                        _ if tl.tracks.get_video_track(track_id).is_some() => "Video",
-                        _ if tl.tracks.get_audio_track(track_id).is_some() => "Audio",
-                        _ => "Subtitle",
-                    });
-                    self.draw_property(ctx, rect, y, "Enabled", &track.enabled.to_string());
-                    self.draw_property(ctx, rect, y, "Locked", &track.locked.to_string());
-                    self.draw_property(ctx, rect, y, "Solo", &track.solo.to_string());
-                    
+                    self.draw_property(ctx, rect, y, "Name", &name);
+                    self.draw_property(ctx, rect, y, "Type", kind);
+                    self.draw_property(ctx, rect, y, "Enabled", &enabled.to_string());
+                    self.draw_property(ctx, rect, y, "Locked", &locked.to_string());
+
                     if let Some(audio_track) = tl.tracks.get_audio_track(track_id) {
+                        self.draw_property(ctx, rect, y, "Solo", &audio_track.solo.to_string());
                         self.draw_property(ctx, rect, y, "Volume", &audio_track.volume.to_string());
                         self.draw_property(ctx, rect, y, "Pan", &audio_track.pan.to_string());
                         self.draw_property(ctx, rect, y, "Muted", &audio_track.muted.to_string());
@@ -259,7 +245,39 @@ impl Widget for InspectorWidget {
         
         *y += 22.0;
     }
+}
 
+impl Widget for InspectorWidget {
+
+    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
+        (300.0, f32::INFINITY)
+    }
+
+    fn layout(&mut self, _ctx: &LayoutContext, rect: Rect) {
+        self.rect = rect;
+    }
+
+    fn draw(&self, ctx: &DrawContext, rect: Rect) {
+        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+            color: ctx.theme.bg_secondary,
+            rect: [rect.x, rect.y, rect.w, rect.h],
+        });
+
+        let mut y = rect.y + 10.0;
+        let label_w = 80.0;
+        let value_w = rect.w - label_w - 20.0;
+
+        if let Some(item_id) = self.selected_item {
+            self.draw_item_inspector(ctx, rect, &mut y, item_id);
+        } else if let Some(clip_id) = self.selected_clip {
+            self.draw_clip_inspector(ctx, rect, &mut y, clip_id);
+        } else if let Some(track_id) = self.selected_track {
+            self.draw_track_inspector(ctx, rect, &mut y, track_id);
+        } else {
+            ctx.text_renderer.draw_text("No selection", Point2::new(rect.x + 10.0, y + 20.0), ctx.theme.font_size_md, ctx.theme.text_secondary);
+        }
+
+    }
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         false
     }
@@ -269,6 +287,7 @@ impl Widget for InspectorWidget {
 }
 
 /// Color page inspector
+#[derive(Clone)]
 pub struct ColorInspector {
     pub selected_node: Option<crate::core::id::GradeNodeId>,
     pub node_graph: Option<Arc<RwLock<crate::ui::node_graph::NodeGraph>>>,
@@ -294,6 +313,7 @@ impl Widget for ColorInspector {
 }
 
 /// Fusion page inspector
+#[derive(Clone)]
 pub struct FusionInspector {
     pub selected_tool: Option<String>,
     rect: Rect,
@@ -316,6 +336,7 @@ impl Widget for FusionInspector {
 }
 
 /// Fairlight page inspector
+#[derive(Clone)]
 pub struct FairlightInspector {
     pub selected_track: Option<crate::core::id::TrackId>,
     rect: Rect,
