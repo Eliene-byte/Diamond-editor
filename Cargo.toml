@@ -24,17 +24,17 @@ members = []
 [features]
 default = ["gpu-vulkan", "codec-ffmpeg", "audio-cpal"]
 # Hardware acceleration backends
-gpu-vulkan = ["wgpu/vulkan"]
+gpu-vulkan = ["wgpu/vulkan-portability"]
 gpu-metal = ["wgpu/metal"]
 gpu-dx12 = ["wgpu/dx12"]
-gpu-gl = ["wgpu/gl"]
+gpu-gl = ["wgpu/glsl"]
 # Software rendering fallback (works on ALL hardware)
-gpu-software = ["wgpu/gl"]
+gpu-software = ["wgpu/glsl"]
 # Codecs
-codec-ffmpeg = ["ffmpeg-next", "ffmpeg-sys/next"]
+codec-ffmpeg = ["ffmpeg-next"]
 codec-system = []
 # Audio
-audio-cpal = ["cpal/jack", "cpal/alsa", "cpal/wasapi", "cpal/coreaudio"]
+audio-cpal = ["cpal/jack"]
 audio-minimal = ["cpal"]
 # UI
 ui-egui = ["egui", "egui-wgpu", "egui-winit"]
@@ -42,7 +42,7 @@ ui-minimal = []
 # CPU-only rendering (no GPU required)
 cpu-only = ["gpu-software", "codec-ffmpeg", "audio-cpal", "ui-minimal"]
 # Performance
-simd = ["packed_simd"]
+simd = []
 profiling = ["tracing", "tracing-subscriber"]
 
 [dependencies]
@@ -64,11 +64,11 @@ rmp-serde = { version = "1.1", default-features = false }
 bincode = { version = "1.3", default-features = false }
 
 # Math
-glam = { version = "0.27", default-features = false, features = ["scalar-math", "f32"] }
+glam = { version = "0.27", default-features = false, features = ["scalar-math"] }
 kurbo = { version = "0.9", default-features = false }
-parley = { version = "0.6", default-features = false, features = ["fontdb"] }
+parley = { version = "0.6", default-features = false, features = [] }
 cosmic-text = { version = "0.10", default-features = false }
-swash = { version = "0.8", default-features = false }
+swash = { version = "0.2", default-features = false }
 
 # GPU / Rendering
 wgpu = { version = "23", default-features = false, features = [] }
@@ -86,22 +86,21 @@ egui-winit = { version = "0.30", default-features = false, optional = true }
 epaint = { version = "0.30", default-features = false, optional = true }
 
 # Video/Audio Codecs
-ffmpeg-next = { version = "6", default-features = false, optional = true }
-ffmpeg-sys = { version = "6", default-features = false, optional = true }
+ffmpeg-next = { version = "4.2", default-features = false, optional = true }
 
 # Audio
 cpal = { version = "0.15", default-features = false, optional = true }
-rubato = { version = "0.14", default-features = false, optional = true }
-fundsp = { version = "0.6", default-features = false, optional = true }
+rubato = { version = "0.13", default-features = false, optional = true }
+fundsp = { version = "0.5", default-features = false, optional = true }
 
 # Image/Video processing
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "exr", "tiff", "hdr"] }
-imageproc = { version = "0.25", default-features = false }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg", "exr", "tiff", "hdr"] }
+imageproc = { version = "0.24", default-features = false }
 
 # File handling
-notify = { version = "6.1", default-features = false }
+notify = { version = "6.0", default-features = false }
 walkdir = { version = "2", default-features = false }
-ignore = { version = "0.13", default-features = false }
+ignore = { version = "0.4", default-features = false }
 
 # Async (minimal)
 tokio = { version = "1.38", default-features = false, features = ["rt-multi-thread", "macros", "time", "fs", "sync"] }
@@ -118,7 +117,7 @@ proptest = "1.0"
 cc = "1.0"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", default-features = false, features = ["winuser", "wingdi", "winnt", "libloaderapi", "sysinfoapi", "memoryapi", "handleapi", "errhandlingapi", "processthreadsapi", "fileapi", "pathcch"] }
+winapi = { version = "0.3", default-features = false, features = ["winuser", "wingdi", "winnt", "libloaderapi", "sysinfoapi", "memoryapi", "handleapi", "errhandlingapi", "processthreadsapi", "fileapi"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = { version = "0.9", default-features = false }
