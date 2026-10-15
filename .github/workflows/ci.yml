@@ -84,8 +84,11 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
+          # `--no-default-features` is essential: the default set pulls in
+          # `codec-ffmpeg`, whose backend does not compile yet, which would mask
+          # the GPU matrix entries this job exists to verify.
           if [ -n "${{ matrix.features }}" ]; then
-            cargo check --features "${{ matrix.features }}" 2>&1 | tee check-output.txt
+            cargo check --no-default-features --features "${{ matrix.features }}" 2>&1 | tee check-output.txt
           else
             cargo check --no-default-features 2>&1 | tee check-output.txt
           fi
@@ -111,7 +114,7 @@ jobs:
         run: |
           set -o pipefail
           if [ -n "${{ matrix.features }}" ]; then
-            cargo test --lib --features "${{ matrix.features }}" 2>&1 | tee test-output.txt
+            cargo test --lib --no-default-features --features "${{ matrix.features }}" 2>&1 | tee test-output.txt
           else
             cargo test --lib --no-default-features 2>&1 | tee test-output.txt
           fi
