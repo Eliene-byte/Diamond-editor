@@ -28,16 +28,19 @@ jobs:
             features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
             profile: release
             binary_name: davinci-clone
+            test_features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             features: "gpu-dx12,codec-ffmpeg,audio-cpal"
             profile: release
             binary_name: davinci-clone.exe
+            test_features: "gpu-dx12,codec-ffmpeg,audio-cpal"
           - os: macos-latest
             target: x86_64-apple-darwin
             features: "gpu-metal,codec-ffmpeg,audio-cpal"
             profile: release
             binary_name: davinci-clone
+            test_features: "gpu-metal,codec-ffmpeg,audio-cpal"
 
     steps:
       - name: Checkout repository
@@ -158,7 +161,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
+          - os: windows-latest
+            features: "gpu-dx12,codec-ffmpeg,audio-cpal"
+          - os: macos-latest
+            features: "gpu-metal,codec-ffmpeg,audio-cpal"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -176,10 +185,10 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
       - name: Run unit tests
         timeout-minutes: 15
-        run: cargo test --lib --features "gpu-vulkan,codec-ffmpeg,audio-cpal" -- --test-threads=2 --nocapture
+        run: cargo test --lib --features "${{ matrix.features }}" -- --test-threads=2 --nocapture
       - name: Run doc tests
         timeout-minutes: 10
-        run: cargo test --doc --features "gpu-vulkan,codec-ffmpeg,audio-cpal"
+        run: cargo test --doc --features "${{ matrix.features }}"
 
   lint:
     name: Lint & Format
@@ -222,7 +231,7 @@ jobs:
         run: cargo install cargo-audit --locked --no-track
       - name: Audit dependencies
         timeout-minutes: 10
-        run: cargo audit --ignore RUSTSEC-0000-0000
+        run: cargo audit
 
   security-scan:
     name: Security Scan (Trivy)
