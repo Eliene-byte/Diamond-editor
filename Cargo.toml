@@ -25,6 +25,7 @@ members = []
 
 [features]
 default = ["gpu-vulkan", "codec-ffmpeg", "audio-cpal"]
+
 # Hardware acceleration backends.
 # wgpu 23 backend feature names are: vulkan-portability, metal, dx12, angle.
 # (`glsl` is a shader-language feature, NOT a backend.)
@@ -32,111 +33,89 @@ gpu-vulkan = ["wgpu/vulkan-portability"]
 gpu-metal = ["wgpu/metal"]
 gpu-dx12 = ["wgpu/dx12"]
 gpu-gl = ["wgpu/angle"]
+
 # Software rendering fallback (works on ALL hardware)
 gpu-software = ["wgpu/angle"]
+
 # Codecs
 codec-ffmpeg = ["dep:ffmpeg-next"]
 codec-system = []
-# Audio
+
+# Audio.
 # cpal's default backend set (ALSA on Linux, WASAPI on Windows, CoreAudio on macOS)
 # is what CI and end users have. Enabling `jack` would require libjack dev headers,
 # which are not present on stock runners.
 audio-cpal = ["dep:cpal"]
 audio-minimal = ["dep:cpal"]
-# UI
-ui-egui = ["dep:egui", "dep:egui-wgpu", "dep:egui-winit"]
+
+# The UI is a custom immediate-mode framework on wgpu; there is no egui dependency.
 ui-minimal = []
+
 # CPU-only rendering (no GPU required)
 cpu-only = ["gpu-software", "codec-ffmpeg", "audio-cpal", "ui-minimal"]
-# Performance
+
 simd = []
-profiling = ["dep:tracing", "dep:tracing-subscriber"]
+profiling = ["dep:tracing-subscriber"]
 
 [dependencies]
-# Core
-anyhow = { version = "1.0", default-features = false }
+# --- Core ---
 thiserror = "1.0"
 parking_lot = "0.12"
-# `crossbeam` re-exports `crossbeam::channel` when the `crossbeam-channel`
-# feature is on. Default features enable it, so no explicit features are listed here.
+# `crossbeam` re-exports `crossbeam::channel` under its default features.
 crossbeam = "0.8"
-crossbeam-channel = "0.5"
 slotmap = { version = "1.0", default-features = false }
-generational-arena = "0.2"
-smallvec = { version = "1.0", default-features = false }
-smol_str = "0.1"
-ahash = "0.8"
 bitflags = "2"
 num_cpus = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "5"
 toml = "0.8"
 
-# Serialization (minimal)
+# --- Serialization ---
 serde = { version = "1.0", features = ["derive"], default-features = false }
 serde_json = { version = "1.0", default-features = false }
-rmp-serde = { version = "1.1", default-features = false }
-bincode = { version = "1.3", default-features = false }
 
-# Math
+# --- Math ---
 glam = { version = "0.27", default-features = false, features = ["scalar-math"] }
-kurbo = { version = "0.9", default-features = false }
-parley = { version = "0.6", default-features = false, features = [] }
-cosmic-text = { version = "0.10", default-features = false }
-swash = { version = "0.2", default-features = false }
 
-# GPU / Rendering
+# --- GPU / Rendering ---
 wgpu = { version = "23", default-features = false, features = [] }
-wgpu-types = "23"
 bytemuck = { version = "1.14", default-features = false }
-raw-window-handle = "0.6"
 
-# Windowing
+# --- Windowing ---
 winit = { version = "0.30", default-features = false, features = [] }
 
-# UI - egui is lightweight but adds size. We'll use a custom immediate-mode UI on wgpu for minimum size.
-egui = { version = "0.30", default-features = false, features = [], optional = true }
-egui-wgpu = { version = "0.30", default-features = false, optional = true }
-egui-winit = { version = "0.30", default-features = false, optional = true }
-epaint = { version = "0.30", default-features = false, optional = true }
-
-# Video/Audio Codecs
+# --- Video ---
 ffmpeg-next = { version = "4.2", default-features = false, optional = true }
 
-# Audio
+# --- Audio ---
 cpal = { version = "0.15", default-features = false, optional = true }
 rubato = { version = "0.13", default-features = false, optional = true }
-fundsp = { version = "0.5", default-features = false, optional = true }
 
-# Image/Video processing
+# --- Image ---
 image = { version = "0.24", default-features = false, features = ["png", "jpeg", "exr", "tiff", "hdr"] }
-imageproc = { version = "0.24", default-features = false }
 
-# File handling
+# --- File handling ---
 notify = { version = "6.0", default-features = false }
 walkdir = { version = "2", default-features = false }
 ignore = { version = "0.4", default-features = false }
+
+# --- Cache ---
 lru = "0.12"
 lz4_flex = { version = "0.11", default-features = false }
 zstd = "0.13"
 
-# Procedural
+# --- Procedural ---
 rand = "0.8"
 rand_chacha = "0.3"
 
-# Async (minimal)
+# --- Async ---
 tokio = { version = "1.38", default-features = false, features = ["rt-multi-thread", "macros", "time", "fs", "sync"] }
 
-# Logging
-tracing = { version = "0.1", default-features = false, optional = true }
+# --- Logging ---
 tracing-subscriber = { version = "0.3", default-features = false, optional = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", default-features = false }
 proptest = "1.0"
-
-[build-dependencies]
-cc = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", default-features = false, features = ["winuser", "wingdi", "winnt", "libloaderapi", "sysinfoapi", "memoryapi", "handleapi", "errhandlingapi", "processthreadsapi", "fileapi"] }
@@ -146,8 +125,3 @@ core-foundation = { version = "0.9", default-features = false }
 core-graphics = { version = "0.23", default-features = false }
 metal = { version = "0.27", default-features = false }
 objc = { version = "0.2", default-features = false }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-wayland-client = { version = "0.31", default-features = false, optional = true }
-wayland-protocols = { version = "0.31", default-features = false, optional = true }
-x11rb = { version = "0.11", default-features = false, optional = true }
