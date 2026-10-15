@@ -102,6 +102,14 @@ jobs:
           done
           echo "::notice::total errors: $(grep -cE '^error(\[E[0-9]+\])?:' check-output.txt || true)"
 
+          # Build scripts (notably ffmpeg-sys-next) fail by panicking, and the
+          # reason is on the lines *after* the "panicked at" one. Emit that
+          # context, otherwise the log only says "panicked at build.rs:NNN".
+          grep -n -A6 'panicked at' check-output.txt | head -40 | while IFS= read -r line; do
+            msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
+            echo "::error title=panic-context::${msg}"
+          done
+
       - name: Run tests
         continue-on-error: true
         run: |
