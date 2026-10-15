@@ -4,7 +4,7 @@ use crate::core::id::{ClipId, TrackId, TrackItemId, ProjectId, TimelineId};
 use crate::core::time::{Frame, FrameRange, Timecode, FrameRate};
 use crate::core::types::{TrackType, MediaType, EditOperation, TrimEdge};
 use crate::core::error::{Result, TimelineError};
-use crate::timeline::track::{TrackItem, TrackContainer, VideoTrack, AudioTrack};
+use crate::timeline::track::{TrackItem, TrackContainer, VideoTrack, AudioTrack, SubtitleTrack, TrackItemKey, TrackItemColor};
 use crate::media::pool::MediaPool;
 use std::collections::HashMap;
 

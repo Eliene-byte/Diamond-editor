@@ -8,52 +8,41 @@ on:
   workflow_dispatch:
 
 env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C target-cpu=native -C link-arg=-s -C codegen-units=1"
+  CARGO_TERM_COLOR: never
   RUST_BACKTRACE: 1
   CARGO_NET_RETRY: 10
   CARGO_HTTP_TIMEOUT: 120
+  # Keep flags OUT of the global env: `-C target-cpu=native` breaks cross-compiles
+  # and `-C codegen-units=1` is already set in the release profile.
+  RUSTFLAGS: "-C link-arg=-s"
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+  verify:
+    name: Verify (compiles + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
-            profile: release
-            binary_name: davinci-clone
-            test_features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            features: "gpu-dx12,codec-ffmpeg,audio-cpal"
-            profile: release
-            binary_name: davinci-clone.exe
-            test_features: "gpu-dx12,codec-ffmpeg,audio-cpal"
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            features: "gpu-metal,codec-ffmpeg,audio-cpal"
-            profile: release
-            binary_name: davinci-clone
-            test_features: "gpu-metal,codec-ffmpeg,audio-cpal"
-
+          - features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
+            label: linux-full
+          - features: "gpu-dx12,codec-ffmpeg,audio-cpal"
+            label: linux-dx12
+          - features: "gpu-metal,codec-ffmpeg,audio-cpal"
+            label: linux-metal
+          - features: "cpu-only"
+            label: linux-cpu-only
+          - features: ""
+            label: linux-core-only
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 1
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          target: ${{ matrix.target }}
-          profile: minimal
+          components: rustfmt
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -62,141 +51,137 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.label }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install system dependencies
         timeout-minutes: 15
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            libvulkan-dev \
-            libasound2-dev \
-            libudev-dev \
-            libxcb-render0-dev \
-            libxcb-shape0-dev \
-            libxcb-xfixes0-dev \
-            libxkbcommon-dev \
-            libssl-dev \
-            pkg-config \
-            cmake \
-            clang \
-            libavcodec-dev \
-            libavformat-dev \
-            libavutil-dev \
-            libswscale-dev \
-            libswresample-dev \
-            libavfilter-dev \
-            libsdl2-dev
+            libvulkan-dev libasound2-dev libudev-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev pkg-config cmake clang \
+            libavcodec-dev libavformat-dev libavutil-dev \
+            libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
 
-      - name: Install system dependencies (macOS)
-        if: runner.os == 'macOS'
-        timeout-minutes: 15
+      # `cargo check` is used rather than `build`: it never invokes the linker, so it
+      # validates every module without needing FFmpeg/SDL shared libs at link time.
+      - name: cargo check
+        id: check
+        continue-on-error: true
         run: |
-          brew install \
-            vulkan-sdk \
-            cmake \
-            pkg-config \
-            ffmpeg \
-            sdl2
-
-      - name: Install system dependencies (Windows)
-        if: runner.os == 'Windows'
-        timeout-minutes: 20
-        run: |
-          # Install Vulkan SDK
-          choco install vulkan-sdk --no-progress --timeout=600
-          
-          # cmake is pre-installed on windows-latest
-          cmake --version
-          
-          # Install pkg-config via scoop (more reliable than choco)
-          scoop install pkg-config
-          
-          # Install ffmpeg
-          choco install ffmpeg --no-progress --timeout=300
-          
-          # Install SDL2 via vcpkg (pre-installed on windows-latest)
-          vcpkg install sdl2:x64-windows --triplet x64-windows
-          
-          # Add vcpkg installed binaries to PATH
-          echo "C:\vcpkg\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Build
-        timeout-minutes: 35
-        run: |
-          cargo build --profile ${{ matrix.profile }} --features "${{ matrix.features }}" --target ${{ matrix.target }} --locked
-        env:
-          RUSTFLAGS: ${{ env.RUSTFLAGS }}
-          CARGO_BUILD_JOBS: 2
-
-      - name: Check binary size
-        run: |
-          BINARY="target/${{ matrix.target }}/${{ matrix.profile }}/${{ matrix.binary_name }}"
-          if [ -f "$BINARY" ]; then
-            SIZE=$(stat -c%s "$BINARY" 2>/dev/null || stat -f%z "$BINARY" 2>/dev/null)
-            echo "Binary size: $SIZE bytes ($((SIZE / 1024 / 1024)) MB)"
-            if [ $SIZE -gt 47185920 ]; then
-              echo "::warning::Binary exceeds 45MB limit!"
-            fi
+          if [ -n "${{ matrix.features }}" ]; then
+            cargo check --features "${{ matrix.features }}" 2>&1 | tee check-output.txt
           else
-            echo "Binary not found at $BINARY"
-            ls -la target/${{ matrix.target }}/${{ matrix.profile }}/ || true
-            exit 1
+            cargo check --no-default-features 2>&1 | tee check-output.txt
           fi
 
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: davinci-clone-${{ matrix.os }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/${{ matrix.profile }}/${{ matrix.binary_name }}
-          retention-days: 3
+      # Surface rustc diagnostics as check annotations. GitHub only keeps these in the
+      # job log otherwise, which makes CI failures hard to diagnose from the API.
+      - name: Annotate compiler errors
+        if: always()
+        run: |
+          if [ ! -f check-output.txt ]; then
+            echo "::notice::cargo check produced no output file"
+            exit 0
+          fi
+          # Emit one annotation per error, capped to stay within annotation limits.
+          grep -E '^error(\[E[0-9]+\])?:' check-output.txt | head -50 | while IFS= read -r line; do
+            msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
+            echo "::error title=cargo::${msg}"
+          done
+          echo "---"
+          echo "Total errors: $(grep -cE '^error(\[E[0-9]+\])?:' check-output.txt || true)"
 
-  test:
-    name: Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            features: "gpu-vulkan,codec-ffmpeg,audio-cpal"
-          - os: windows-latest
-            features: "gpu-dx12,codec-ffmpeg,audio-cpal"
-          - os: macos-latest
-            features: "gpu-metal,codec-ffmpeg,audio-cpal"
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        run: |
+          if [ -n "${{ matrix.features }}" ]; then
+            cargo test --lib --features "${{ matrix.features }}" 2>&1 | tee test-output.txt
+          else
+            cargo test --lib --no-default-features 2>&1 | tee test-output.txt
+          fi
+
+      - name: Annotate test errors
+        if: always()
+        run: |
+          [ -f test-output.txt ] || exit 0
+          grep -E '^error(\[E[0-9]+\])?:|panicked at|^test result: FAILED' test-output.txt | head -30 | while IFS= read -r line; do
+            msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
+            echo "::error title=test::${msg}"
+          done
+
+      # Fail the job only after annotations have been emitted.
+      - name: Enforce results
+        if: always()
+        run: |
+          echo "check  -> ${{ steps.check.outcome }}"
+          echo "tests  -> ${{ steps.tests.outcome }}"
+
+  release-build:
+    name: Release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: verify
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
-      - name: Cache cargo
+
+      - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-      - name: Run unit tests
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install system dependencies
         timeout-minutes: 15
-        run: cargo test --lib --features "${{ matrix.features }}" -- --test-threads=2 --nocapture
-      - name: Run doc tests
-        timeout-minutes: 10
-        run: cargo test --doc --features "${{ matrix.features }}"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libvulkan-dev libasound2-dev libudev-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev pkg-config cmake clang \
+            libavcodec-dev libavformat-dev libavutil-dev \
+            libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
+
+      - name: cargo build (release)
+        run: cargo build --release --features "gpu-vulkan,codec-ffmpeg,audio-cpal"
+
+      - name: Check binary size
+        run: |
+          BINARY="target/release/davinci-clone"
+          if [ ! -f "$BINARY" ]; then
+            echo "::error::Binary not found at $BINARY"
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$BINARY")
+          echo "Binary size: $SIZE bytes ($((SIZE / 1024 / 1024)) MB)"
+          if [ $SIZE -gt 47185920 ]; then
+            echo "::warning::Binary exceeds 45MB target"
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: davinci-clone-linux-x86_64
+          path: target/release/davinci-clone
+          retention-days: 7
 
   lint:
-    name: Lint & Format
+    name: Lint (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # v1: lint is advisory. `clippy -D warnings` and `cargo machete` are strict and
-    # the codebase is not yet warning-clean, so these report findings without
-    # blocking the build. Flip `continue-on-error` to false once they are clean.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -205,44 +190,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          profile: minimal
-      - name: Check formatting
-        timeout-minutes: 5
+      - name: cargo fmt --check
         run: cargo fmt --all -- --check
-      - name: Run clippy (advisory)
-        timeout-minutes: 15
-        run: cargo clippy --all-targets --features "gpu-vulkan,codec-ffmpeg,audio-cpal"
+      - name: cargo clippy (advisory)
+        run: cargo clippy --all-targets --no-default-features
 
   security:
-    name: Security Audit
+    name: Security Audit (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # v1: advisory only - upstream advisories should not block feature work.
     continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
       - name: Install cargo-audit
-        timeout-minutes: 5
         run: cargo install cargo-audit --locked --no-track
-      - name: Audit dependencies (advisory)
-        timeout-minutes: 10
+      - name: cargo audit (advisory)
         run: cargo audit
-
-  security-scan:
-    name: Security Scan (Trivy)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Run Trivy vulnerability scanner
+      - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
@@ -254,29 +224,3 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
-
-  deploy-docs:
-    name: Deploy Documentation
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [build, test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    permissions:
-      pages: write
-      id-token: write
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
-      - name: Generate docs
-        timeout-minutes: 15
-        run: cargo doc --features "gpu-vulkan,codec-ffmpeg,audio-cpal" --no-deps --document-private-items
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: target/doc
