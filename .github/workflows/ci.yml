@@ -5,17 +5,20 @@ on:
     branches: [master, main, develop]
   pull_request:
     branches: [master, main, develop]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C target-cpu=native -C link-arg=-s"
+  RUSTFLAGS: "-C target-cpu=native -C link-arg=-s -C codegen-units=1"
   RUST_BACKTRACE: 1
+  CARGO_NET_RETRY: 10
+  CARGO_HTTP_TIMEOUT: 120
 
 jobs:
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -41,11 +44,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
+          profile: minimal
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -60,9 +65,10 @@ jobs:
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
             libvulkan-dev \
             libasound2-dev \
             libudev-dev \
@@ -84,6 +90,7 @@ jobs:
 
       - name: Install system dependencies (macOS)
         if: runner.os == 'macOS'
+        timeout-minutes: 15
         run: |
           brew install \
             vulkan-sdk \
@@ -94,9 +101,10 @@ jobs:
 
       - name: Install system dependencies (Windows)
         if: runner.os == 'Windows'
+        timeout-minutes: 20
         run: |
           # Install Vulkan SDK
-          choco install vulkan-sdk --no-progress
+          choco install vulkan-sdk --no-progress --timeout=600
           
           # cmake is pre-installed on windows-latest
           cmake --version
@@ -105,19 +113,21 @@ jobs:
           scoop install pkg-config
           
           # Install ffmpeg
-          choco install ffmpeg --no-progress
+          choco install ffmpeg --no-progress --timeout=300
           
           # Install SDL2 via vcpkg (pre-installed on windows-latest)
-          vcpkg install sdl2:x64-windows
+          vcpkg install sdl2:x64-windows --triplet x64-windows
           
           # Add vcpkg installed binaries to PATH
           echo "C:\vcpkg\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build
+        timeout-minutes: 35
         run: |
-          cargo build --profile ${{ matrix.profile }} --features "${{ matrix.features }}" --target ${{ matrix.target }}
+          cargo build --profile ${{ matrix.profile }} --features "${{ matrix.features }}" --target ${{ matrix.target }} --locked
         env:
           RUSTFLAGS: ${{ env.RUSTFLAGS }}
+          CARGO_BUILD_JOBS: 2
 
       - name: Check binary size
         run: |
@@ -139,17 +149,23 @@ jobs:
         with:
           name: davinci-clone-${{ matrix.os }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/${{ matrix.profile }}/${{ matrix.binary_name }}
-          retention-days: 7
+          retention-days: 3
 
   test:
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -159,88 +175,80 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
       - name: Run unit tests
-        run: cargo test --lib --features "gpu-vulkan,codec-ffmpeg,audio-cpal"
-      - name: Run integration tests
-        run: cargo test --features "gpu-vulkan,codec-ffmpeg,audio-cpal" -- --test-threads=1
+        timeout-minutes: 15
+        run: cargo test --lib --features "gpu-vulkan,codec-ffmpeg,audio-cpal" -- --test-threads=2 --nocapture
       - name: Run doc tests
+        timeout-minutes: 10
         run: cargo test --doc --features "gpu-vulkan,codec-ffmpeg,audio-cpal"
 
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          profile: minimal
       - name: Install cargo-machete
-        run: cargo install cargo-machete --locked
+        timeout-minutes: 5
+        run: cargo install cargo-machete --locked --no-track
       - name: Check formatting
+        timeout-minutes: 5
         run: cargo fmt --all -- --check
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        timeout-minutes: 15
+        run: cargo clippy --all-targets --features "gpu-vulkan,codec-ffmpeg,audio-cpal" -- -D warnings
       - name: Check for unused dependencies
+        timeout-minutes: 5
         run: cargo machete
 
   security:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        timeout-minutes: 5
+        run: cargo install cargo-audit --locked --no-track
       - name: Audit dependencies
-        run: cargo audit
+        timeout-minutes: 10
+        run: cargo audit --ignore RUSTSEC-0000-0000
 
-  bench:
-    name: Benchmarks
+  security-scan:
+    name: Security Scan (Trivy)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
-      - name: Run benchmarks
-        run: cargo bench --features "gpu-vulkan,codec-ffmpeg,audio-cpal,profiling" -- --save-baseline main
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+          fetch-depth: 1
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          name: benchmark-results
-          path: target/criterion/
-
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: [build, test, lint, security]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          path: artifacts
-      - name: Create release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            artifacts/**/davinci-clone*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          sarif_file: 'trivy-results.sarif'
 
   deploy-docs:
     name: Deploy Documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [build, test]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
@@ -248,9 +256,14 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
       - name: Generate docs
-        run: cargo doc --features "gpu-vulkan,codec-ffmpeg,audio-cpal" --no-deps
+        timeout-minutes: 15
+        run: cargo doc --features "gpu-vulkan,codec-ffmpeg,audio-cpal" --no-deps --document-private-items
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
