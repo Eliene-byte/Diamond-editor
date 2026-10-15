@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 pub struct ScopesRenderer {
     device: Arc<Device>,
+    queue: Arc<Queue>,
     pipelines: std::collections::HashMap<ScopeMode, RenderPipeline>,
     bind_group_layout: Arc<BindGroupLayout>,
     texture_manager: TextureManager,
@@ -26,8 +27,9 @@ pub enum ScopeMode {
 }
 
 impl ScopesRenderer {
-    pub fn new(device: Arc<Device>) -> Self {
-        let texture_manager = TextureManager::new(device.clone(), device.queue().clone());
+    /// `queue` is passed in explicitly: `wgpu::Device` has no `queue()` accessor.
+    pub fn new(device: Arc<Device>, queue: Arc<Queue>) -> Self {
+        let texture_manager = TextureManager::new(device.clone(), queue);
         
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Scopes Bind Group Layout"),
@@ -66,6 +68,7 @@ impl ScopesRenderer {
         
         Self {
             device: device.clone(),
+            queue,
             pipelines,
             bind_group_layout: Arc::new(bind_group_layout),
             texture_manager,
@@ -94,7 +97,9 @@ impl ScopesRenderer {
 
     fn render_scope(&mut self, mode: ScopeMode, input: &GpuTexture, output: &GpuTexture, uniforms: ScopesUniforms) -> Result<(), Box<dyn std::error::Error>> {
         let device = &self.device;
-        let queue = &device.queue();
+        // The queue cannot be recovered from the device, so it is borrowed from the
+        // manager we were constructed with.
+        let queue = self.queue.as_ref();
         
         let uniform_buffer = UniformBuffer::new_uniform(device, &uniforms, Some("Scopes Uniforms"));
         

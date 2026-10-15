@@ -39,9 +39,9 @@ impl ScopesWidget {
 
     /// Attach the GPU device used to build the scope renderer and its output textures.
     /// Until this is called the widget stays inert (no GPU work, nothing drawn).
-    pub fn set_device(&mut self, device: &Arc<wgpu::Device>) {
+    pub fn set_device(&mut self, device: &Arc<wgpu::Device>, queue: &Arc<wgpu::Queue>) {
         self.device = Some(device.clone());
-        self.scopes_renderer = Some(Arc::new(ScopesRenderer::new(device.clone())));
+        self.scopes_renderer = Some(Arc::new(ScopesRenderer::new(device.clone(), queue.clone())));
         // Output textures belong to the previous device, drop them.
         self.output_textures.clear();
         self.render_scopes();

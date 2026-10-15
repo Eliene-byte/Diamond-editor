@@ -230,8 +230,64 @@ impl TextureManager {
         }
     }
 
+    /// 3D LUT texture (used by the color pipeline).
+    pub fn create_3d_texture(&mut self, width: u32, height: u32, depth: u32, data: Vec<u8>) -> GpuTexture {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("LUT 3D"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: depth },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            &data,
+            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) },
+            wgpu::Extent3d { width, height, depth_or_array_layers: depth },
+        );
+        GpuTexture {
+            texture: Arc::new(texture),
+            view: Arc::new(texture.create_view(&Default::default())),
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            width, height, depth, mip_levels: 1,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        }
+    }
+
+    /// 1D LUT texture (used by the color pipeline).
+    pub fn create_1d_texture(&mut self, width: u32, data: Vec<u8>) -> GpuTexture {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("LUT 1D"),
+            size: wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D1,
+            format: wgpu::TextureFormat::Rgba16Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            &data,
+            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 6), rows_per_image: None },
+            wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 },
+        );
+        GpuTexture {
+            texture: Arc::new(texture),
+            view: Arc::new(texture.create_view(&Default::default())),
+            format: wgpu::TextureFormat::Rgba16Unorm,
+            width, height: 1, depth: 1, mip_levels: 1,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        }
+    }
+
     fn bytes_per_row(&self, width: u32, format: TextureFormat) -> u32 {
-        let block_size = format.block_size().unwrap_or(4);
+        // `block_copy_size` takes an aspect argument and supersedes the deprecated
+        // `block_size()`.
+        let block_size = format.block_copy_size(None).unwrap_or(4);
         ((width + 3) / 4) * 4 * block_size // Align to 256 bytes
     }
 }

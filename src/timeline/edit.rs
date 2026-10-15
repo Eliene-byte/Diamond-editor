@@ -9,9 +9,10 @@ use crate::timeline::track::{TrackContainer, TrackItem, TrackItemKey};
 use std::collections::HashMap;
 
 /// Edit modes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EditMode {
     /// Normal - overwrite, leave gaps
+    #[default]
     Normal,
     /// Ripple - close gaps, shift subsequent clips
     Ripple,
@@ -97,8 +98,8 @@ impl Editor {
                 TrimEdge::Out => item.timeline_out(),
             };
             
-            for (_, key) in track.items.range(start_search..) {
-                if let Some(other) = timeline.items.get(key) {
+            for (_, key) in track.items().range(start_search..) {
+                if let Some(other) = timeline.item_by_key(*key) {
                     if other.id != item_id {
                         affected.push(other.id);
                     }
@@ -115,8 +116,8 @@ impl Editor {
                 affected_item.timeline_range = affected_item.timeline_range.offset(delta);
                 // Update track index
                 if let Some(track) = timeline.get_track_mut(track_id) {
-                    track.items.remove(&(affected_item.timeline_in() - delta));
-                    track.items.insert(affected_item.timeline_in(), affected_item.key);
+                    track.items_mut().remove(&(affected_item.timeline_in() - delta));
+                    track.items_mut().insert(affected_item.timeline_in(), affected_item.key);
                 }
             }
         }
@@ -142,8 +143,8 @@ impl Editor {
         // Shift subsequent clips left
         if let Some(track) = timeline.get_track(track_id) {
             let mut to_shift = Vec::new();
-            for (_, key) in track.items.range(gap_start..) {
-                if let Some(other) = timeline.items.get(key) {
+            for (_, key) in track.items().range(gap_start..) {
+                if let Some(other) = timeline.item_by_key(*key) {
                     to_shift.push(other.id);
                 }
             }
@@ -155,8 +156,8 @@ impl Editor {
                         affected_item.timeline_out() - gap_duration,
                     );
                     if let Some(track) = timeline.get_track_mut(track_id) {
-                        track.items.remove(&(affected_item.timeline_in() + gap_duration));
-                        track.items.insert(affected_item.timeline_in(), affected_item.key);
+                        track.items_mut().remove(&(affected_item.timeline_in() + gap_duration));
+                        track.items_mut().insert(affected_item.timeline_in(), affected_item.key);
                     }
                 }
             }
@@ -176,25 +177,31 @@ impl Editor {
         position: Frame,
         duration: Frame,
     ) -> Result<()> {
+        let mut to_shift = Vec::new();
         if let Some(track) = timeline.get_track(track_id) {
-            let mut to_shift = Vec::new();
-            for (_, key) in track.items.range(position..) {
-                if let Some(item) = timeline.items.get(key) {
+            for (_, key) in track.items().range(position..) {
+                if let Some(item) = timeline.item_by_key(*key) {
                     to_shift.push(item.id);
                 }
             }
-            
-            for affected_id in to_shift {
-                if let Some(affected_item) = timeline.get_item_mut(affected_id) {
+        }
+        
+        for affected_id in to_shift {
+            // Collect the values first: `get_item_mut` and `get_track_mut` would
+            // otherwise both borrow the timeline mutably at the same time.
+            let (old_start, new_start, key) = match timeline.get_item_mut(affected_id) {
+                Some(affected_item) => {
                     affected_item.timeline_range = FrameRange::new(
                         affected_item.timeline_in() + duration,
                         affected_item.timeline_out() + duration,
                     );
-                    if let Some(track) = timeline.get_track_mut(track_id) {
-                        track.items.remove(&(affected_item.timeline_in() - duration));
-                        track.items.insert(affected_item.timeline_in(), affected_item.key);
-                    }
+                    (affected_item.timeline_in() - duration, affected_item.timeline_in(), affected_item.key)
                 }
+                None => continue,
+            };
+            if let Some(track) = timeline.get_track_mut(track_id) {
+                track.items_mut().remove(&old_start);
+                track.items_mut().insert(new_start, key);
             }
         }
         
@@ -247,8 +254,8 @@ impl Editor {
             right_mut.source_range = FrameRange::new(right_mut.source_out() - right_source_duration, right_mut.source_out());
             // Update track index
             if let Some(track) = timeline.get_track_mut(left.track_id) {
-                track.items.remove(&right.timeline_in());
-                track.items.insert(new_edit_point, right_mut.key);
+                track.items_mut().remove(&right.timeline_in());
+                track.items_mut().insert(new_edit_point, right_mut.key);
             }
         }
         
@@ -315,8 +322,8 @@ impl Editor {
         
         // Check for collisions
         if let Some(track) = timeline.get_track(track_id) {
-            for (_, key) in track.items.range(..) {
-                if let Some(other) = timeline.items.get(key) {
+            for (_, key) in track.items().range(..) {
+                if let Some(other) = timeline.item_by_key(*key) {
                     if other.id != item_id {
                         let other_range = other.timeline_range;
                         let new_range = FrameRange::new(new_position, new_position + item.timeline_duration());
@@ -482,7 +489,7 @@ impl Editor {
         for tid in tracks {
             if let Some(track) = timeline.get_track(tid) {
                 for (_, key) in track.items() {
-                    if let Some(item) = timeline.items.get(key) {
+                    if let Some(item) = timeline.item_by_key(*key) {
                         points.push(item.timeline_in());
                         points.push(item.timeline_out());
                     }
@@ -509,21 +516,5 @@ impl Editor {
         }
         
         frame
-    }
-}
-
-impl Timeline {
-    fn get_track(&self, track_id: TrackId) -> Option<&dyn TrackItems> {
-        self.tracks.get_video_track(track_id)
-            .map(|t| t as &dyn TrackItems)
-            .or_else(|| self.tracks.get_audio_track(track_id).map(|t| t as &dyn TrackItems))
-            .or_else(|| self.tracks.get_subtitle_track(track_id).map(|t| t as &dyn TrackItems))
-    }
-
-    fn get_track_mut(&mut self, track_id: TrackId) -> Option<&mut dyn TrackItemsMut> {
-        self.tracks.get_video_track_mut(track_id)
-            .map(|t| t as &mut dyn TrackItemsMut)
-            .or_else(|| self.tracks.get_audio_track_mut(track_id).map(|t| t as &mut dyn TrackItemsMut))
-            .or_else(|| self.tracks.get_subtitle_track_mut(track_id).map(|t| t as &mut dyn TrackItemsMut))
     }
 }

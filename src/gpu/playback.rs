@@ -98,8 +98,12 @@ impl FrameCache {
 
 impl PlaybackEngine {
     pub fn new(renderer: Arc<RwLock<GpuRenderer>>) -> Self {
-        let texture_manager = Arc::new(TextureManager::new(renderer.read().device(), renderer.read().queue()));
-        let color_pipeline = Arc::new(RwLock::new(ColorPipeline::new(renderer.read().device().clone())));
+        let (device, queue) = {
+            let r = renderer.read();
+            (r.device().clone(), r.queue().clone())
+        };
+        let texture_manager = Arc::new(TextureManager::new(device.clone(), queue.clone()));
+        let color_pipeline = Arc::new(RwLock::new(ColorPipeline::new(device, queue)));
         
         let (frame_tx, frame_rx) = unbounded();
         let (decode_tx, decode_rx) = unbounded();

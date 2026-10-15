@@ -209,7 +209,8 @@ impl GpuRenderer {
         vsync: bool,
         backend: RendererBackend,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        // wgpu 23 takes `InstanceDescriptor` by value, not by reference.
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: backend.to_wgpu_backend(),
             ..Default::default()
         });
@@ -259,8 +260,8 @@ impl GpuRenderer {
         let pipeline_manager = PipelineManager::new(device.clone());
         let texture_manager = TextureManager::new(device.clone(), queue.clone());
         let buffer_manager = BufferManager::new(device.clone(), queue.clone());
-        let color_pipeline = ColorPipeline::new(device.clone());
-        let scopes_renderer = ScopesRenderer::new(device.clone());
+        let color_pipeline = ColorPipeline::new(device.clone(), queue.clone());
+        let scopes_renderer = ScopesRenderer::new(device.clone(), queue.clone());
         let compute_pipeline = ComputePipeline::new(device.clone());
         
         Ok(Self {
@@ -295,7 +296,6 @@ impl GpuRenderer {
     pub fn backend(&self) -> RendererBackend {
         self.backend
     }
-}
 
     pub fn configure_surface(&self, surface: Surface<'static>, width: u32, height: u32) {
         let mut config = self.config.write();

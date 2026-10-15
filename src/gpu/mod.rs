@@ -4,6 +4,7 @@ pub mod renderer;
 pub mod pipeline;
 pub mod texture;
 pub mod buffer;
+pub mod text;
 pub mod compute;
 pub mod color;
 pub mod scopes;

@@ -362,6 +362,9 @@ impl TransitionRenderer {
 
     pub fn render(
         &self,
+        // `CommandEncoder` has no `device()` accessor in wgpu 23, so the device is
+        // threaded in by the caller.
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         transition: &Transition,
         left_texture: &wgpu::TextureView,
@@ -372,7 +375,7 @@ impl TransitionRenderer {
         if let Some(pipeline) = self.pipelines.get(&transition.transition_type) {
             let layout = self.bind_group_layouts.get(&transition.transition_type).unwrap();
             
-            let bind_group = encoder.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Transition Bind Group"),
                 layout,
                 entries: &[

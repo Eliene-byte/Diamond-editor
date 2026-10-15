@@ -3,7 +3,7 @@
 
 use std::ops::{Add, Sub, AddAssign, SubAssign, Mul, Div, Rem, Neg};
 use std::fmt;
-use crate::FrameRate;
+pub use crate::core::types::FrameRate;
 
 /// Frame count - the fundamental unit
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -95,7 +95,7 @@ impl Rational {
         let num = (fps * 1000.0).round() as i64;
         Self { num, den: 1000 }
     }
-    pub const fn reduce(self) -> Self {
+    pub fn reduce(self) -> Self {
         // Simple GCD reduction
         fn gcd(mut a: i64, mut b: i64) -> i64 {
             while b != 0 { let t = b; b = a % b; a = t; } a.abs()
@@ -115,7 +115,8 @@ impl fmt::Display for Rational {
 }
 
 /// SMPTE Timecode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// Ordering derives omitted: `FrameRate` is a plain enum without `PartialOrd`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Timecode {
     pub hours: u8,
     pub minutes: u8,
@@ -166,7 +167,7 @@ impl Timecode {
             total %= frames_per_sec;
             let frames = total as u8;
 
-            Self { hours, minutes: minutes_calc + ten_min_chunks * 10, seconds, frames, drop_frame: true, fps }
+            Self { hours, minutes: minutes_calc + (ten_min_chunks * 10) as u8, seconds, frames, drop_frame: true, fps }
         } else {
             let seconds = (total / frames_per_sec) as u8;
             total %= frames_per_sec;
@@ -229,7 +230,8 @@ impl fmt::Display for Timecode {
 }
 
 /// Time duration with frame accuracy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// Ordering derives omitted: `FrameRate` is a plain enum without `PartialOrd`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Duration {
     pub frames: Frame,
     pub fps: FrameRate,
@@ -279,8 +281,8 @@ impl FrameRange {
     }
     pub const fn empty(at: Frame) -> Self { Self { start: at, end: at } }
     pub const fn length(self) -> Frame { Frame(self.end.0 - self.start.0) }
-    pub const fn contains(self, frame: Frame) -> bool { self.start <= frame && frame < self.end }
-    pub const fn intersects(self, other: Self) -> bool {
+    pub fn contains(self, frame: Frame) -> bool { self.start <= frame && frame < self.end }
+    pub fn intersects(self, other: Self) -> bool {
         self.start < other.end && other.start < self.end
     }
     pub fn union(self, other: Self) -> Self {

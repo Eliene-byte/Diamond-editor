@@ -24,26 +24,31 @@ members = []
 [features]
 default = ["gpu-vulkan", "codec-ffmpeg", "audio-cpal"]
 # Hardware acceleration backends
-gpu-vulkan = ["wgpu/vulkan-portability"]
+# NOTE: use `wgpu/vulkan` (native Vulkan), NOT `vulkan-portability` (which is the
+# MoltenVK shim intended for macOS and enables no backend on Linux).
+gpu-vulkan = ["wgpu/vulkan"]
 gpu-metal = ["wgpu/metal"]
 gpu-dx12 = ["wgpu/dx12"]
 gpu-gl = ["wgpu/glsl"]
 # Software rendering fallback (works on ALL hardware)
 gpu-software = ["wgpu/glsl"]
 # Codecs
-codec-ffmpeg = ["ffmpeg-next"]
+codec-ffmpeg = ["dep:ffmpeg-next"]
 codec-system = []
 # Audio
-audio-cpal = ["cpal/jack"]
-audio-minimal = ["cpal"]
+# cpal's default backend set (ALSA on Linux, WASAPI on Windows, CoreAudio on macOS)
+# is what CI and end users have. Enabling `jack` would require libjack dev headers,
+# which are not present on stock runners.
+audio-cpal = ["dep:cpal"]
+audio-minimal = ["dep:cpal"]
 # UI
-ui-egui = ["egui", "egui-wgpu", "egui-winit"]
+ui-egui = ["dep:egui", "dep:egui-wgpu", "dep:egui-winit"]
 ui-minimal = []
 # CPU-only rendering (no GPU required)
 cpu-only = ["gpu-software", "codec-ffmpeg", "audio-cpal", "ui-minimal"]
 # Performance
 simd = []
-profiling = ["tracing", "tracing-subscriber"]
+profiling = ["dep:tracing", "dep:tracing-subscriber"]
 
 [dependencies]
 # Core

@@ -1,6 +1,8 @@
 //! GPU buffer management
 
 use wgpu::{Device, Queue, Buffer, BufferDescriptor, BufferUsages, BufferAddress, BufferSize};
+// `create_buffer_init` is provided by this extension trait; it must be in scope.
+use wgpu::util::DeviceExt;
 use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
 

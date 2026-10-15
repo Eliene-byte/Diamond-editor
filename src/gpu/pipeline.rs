@@ -104,7 +104,9 @@ impl PipelineManager {
         
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{:?} Layout", key)),
-            bind_group_layouts: &[layout.as_ref()],
+            // `Arc<PipelineLayout>` does not coerce to `&[&BindGroupLayout]`: deref coercion
+            // does not apply to array element types, so build the slice explicitly.
+            bind_group_layouts: std::slice::from_ref(&*layout),
             push_constant_ranges: &key.push_constant_ranges(),
         });
         
@@ -149,7 +151,7 @@ impl PipelineManager {
         
         self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{:?} Layout", key)),
-            bind_group_layouts: &[bind_group_layout.as_ref()],
+            bind_group_layouts: std::slice::from_ref(&*bind_group_layout),
             push_constant_ranges: &key.push_constant_ranges(),
         })
     }

@@ -11,6 +11,7 @@ use std::sync::Arc;
 /// Color grading pipeline
 pub struct ColorPipeline {
     device: Arc<Device>,
+    queue: Arc<Queue>,
     pipeline: RenderPipeline,
     bind_group_layout: Arc<BindGroupLayout>,
     lut3d_bind_group_layout: Arc<BindGroupLayout>,
@@ -21,8 +22,10 @@ pub struct ColorPipeline {
 }
 
 impl ColorPipeline {
-    pub fn new(device: Arc<Device>) -> Self {
-        let texture_manager = TextureManager::new(device.clone(), device.queue().clone());
+    /// `queue` must be passed in explicitly: `wgpu::Device` has no `queue()`
+    /// accessor, so the queue cannot be recovered from the device.
+    pub fn new(device: Arc<Device>, queue: Arc<Queue>) -> Self {
+        let texture_manager = TextureManager::new(device.clone(), queue.clone());
         
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Color Grade Bind Group Layout"),
@@ -67,6 +70,7 @@ impl ColorPipeline {
         
         Self {
             device: device.clone(),
+            queue,
             pipeline,
             bind_group_layout: Arc::new(bind_group_layout),
             lut3d_bind_group_layout: Arc::new(lut3d_bind_group_layout),
@@ -156,7 +160,7 @@ impl ColorPipeline {
         self.current_grade.saturation = cdl.sat;
     }
 
-    fn create_identity_lut3d(&self, device: &Device) -> GpuTexture {
+    fn create_identity_lut3d(&mut self) -> GpuTexture {
         let size = 32u32;
         let mut data = Vec::with_capacity((size * size * size * 4) as usize);
         for z in 0..size { for y in 0..size { for x in 0..size {
@@ -171,7 +175,7 @@ impl ColorPipeline {
         self.texture_manager.create_3d_texture(size, size, size, data)
     }
 
-    fn create_identity_lut1d(&self, device: &Device) -> GpuTexture {
+    fn create_identity_lut1d(&mut self) -> GpuTexture {
         let size = 256u32;
         let mut data = Vec::with_capacity((size * 3 * 2) as usize);
         for i in 0..size {
@@ -182,20 +186,6 @@ impl ColorPipeline {
             data.extend_from_slice(&val.to_le_bytes());
         }
         self.texture_manager.create_1d_texture(size, data)
-    }
-}
-
-impl TextureManager {
-    fn create_3d_texture(&mut self, width: u32, height: u32, depth: u32, data: Vec<u8>) -> GpuTexture {
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor { label: Some("LUT 3D"), size: wgpu::Extent3d { width, height, depth_or_array_layers: depth }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D3, format: wgpu::TextureFormat::Rgba8Unorm, usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, view_formats: &[] });
-        self.queue.write_texture(wgpu::ImageCopyTexture { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, &data, wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) }, wgpu::Extent3d { width, height, depth_or_array_layers: depth });
-        GpuTexture { texture: Arc::new(texture), view: Arc::new(texture.create_view(&Default::default())), format: wgpu::TextureFormat::Rgba8Unorm, width, height, depth, mip_levels: 1, usage: wgpu::TextureUsages::TEXTURE_BINDING }
-    }
-
-    fn create_1d_texture(&mut self, width: u32, data: Vec<u8>) -> GpuTexture {
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor { label: Some("LUT 1D"), size: wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D1, format: wgpu::TextureFormat::Rgba16Unorm, usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, view_formats: &[] });
-        self.queue.write_texture(wgpu::ImageCopyTexture { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }, &data, wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 6), rows_per_image: None }, wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 });
-        GpuTexture { texture: Arc::new(texture), view: Arc::new(texture.create_view(&Default::default())), format: wgpu::TextureFormat::Rgba16Unorm, width, height: 1, depth: 1, mip_levels: 1, usage: wgpu::TextureUsages::TEXTURE_BINDING }
     }
 }
 

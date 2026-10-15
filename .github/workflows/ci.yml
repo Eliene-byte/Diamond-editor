@@ -114,12 +114,21 @@ jobs:
             echo "::error title=test::${msg}"
           done
 
-      # Fail the job only after annotations have been emitted.
+      # Fail the job only after annotations have been emitted, so the compiler
+      # output is always captured regardless of outcome.
       - name: Enforce results
         if: always()
         run: |
-          echo "check  -> ${{ steps.check.outcome }}"
-          echo "tests  -> ${{ steps.tests.outcome }}"
+          echo "check -> ${{ steps.check.outcome }}"
+          echo "tests -> ${{ steps.tests.outcome }}"
+          if [ "${{ steps.check.outcome }}" != "success" ]; then
+            echo "::error::cargo check failed"
+            exit 1
+          fi
+          if [ "${{ steps.tests.outcome }}" != "success" ]; then
+            echo "::error::cargo test failed"
+            exit 1
+          fi
 
   release-build:
     name: Release build
