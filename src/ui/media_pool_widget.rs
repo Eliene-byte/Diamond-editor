@@ -82,17 +82,8 @@ impl MediaPoolWidget {
                                 duration: clip.metadata.duration,
                                 resolution: clip.metadata.resolution,
                                 status: clip.status,
-                                thumbnail: clip.thumbnails.first().map(|t| {
-                                    // Would create GPU texture from thumbnail
-                                    crate::gpu::texture::GpuTexture::new(
-                                        &crate::gpu::renderer::GpuRenderer::new(1, 1, wgpu::PresentMode::AutoVsync, false).await.unwrap().device,
-                                        t.width as u32,
-                                        t.height as u32,
-                                        wgpu::TextureFormat::Rgba8UnormSrgb,
-                                        wgpu::TextureUsages::TEXTURE_BINDING,
-                                        None,
-                                    )
-                                }),
+                                // Would create GPU texture from thumbnail once a device is attached.
+                                thumbnail: None,
                             });
                         }
                     }

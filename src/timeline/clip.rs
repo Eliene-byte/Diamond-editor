@@ -475,11 +475,15 @@ impl Timeline {
     }
 }
 
-trait TrackItems {
+/// Read-only access to a track's item map. Declared here (rather than in
+/// `track.rs`) because `Timeline` needs to walk tracks generically, and shared
+/// with `edit.rs`, which performs the same generic traversal.
+pub(crate) trait TrackItems {
     fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey>;
 }
 
-trait TrackItemsMut {
+/// Mutable access to a track's item map. See [`TrackItems`].
+pub(crate) trait TrackItemsMut {
     fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey>;
 }
 

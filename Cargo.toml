@@ -50,12 +50,20 @@ profiling = ["tracing", "tracing-subscriber"]
 anyhow = { version = "1.0", default-features = false }
 thiserror = "1.0"
 parking_lot = "0.12"
-crossbeam = { version = "0.8", default-features = false }
+# `crossbeam` re-exports `crossbeam::channel` when the `crossbeam-channel`
+# feature is on. Default features enable it, so no explicit features are listed here.
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
 slotmap = { version = "1.0", default-features = false }
 generational-arena = "0.2"
 smallvec = { version = "1.0", default-features = false }
 smol_str = "0.1"
 ahash = "0.8"
+bitflags = "2"
+num_cpus = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+dirs = "5"
+toml = "0.8"
 
 # Serialization (minimal)
 serde = { version = "1.0", features = ["derive"], default-features = false }
@@ -101,6 +109,13 @@ imageproc = { version = "0.24", default-features = false }
 notify = { version = "6.0", default-features = false }
 walkdir = { version = "2", default-features = false }
 ignore = { version = "0.4", default-features = false }
+lru = "0.12"
+lz4_flex = { version = "0.11", default-features = false }
+zstd = "0.13"
+
+# Procedural
+rand = "0.8"
+rand_chacha = "0.3"
 
 # Async (minimal)
 tokio = { version = "1.38", default-features = false, features = ["rt-multi-thread", "macros", "time", "fs", "sync"] }

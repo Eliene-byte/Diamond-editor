@@ -4,7 +4,7 @@ use crate::core::id::{TrackId, TrackItemId, ClipId, TransitionId};
 use crate::core::time::{Frame, FrameRange, Duration};
 use crate::core::types::{EditOperation, TrimEdge, TrackType};
 use crate::core::error::{Result, TimelineError};
-use crate::timeline::clip::Timeline;
+use crate::timeline::clip::{Timeline, TrackItems, TrackItemsMut};
 use crate::timeline::track::{TrackContainer, TrackItem, TrackItemKey};
 use std::collections::HashMap;
 
@@ -526,36 +526,4 @@ impl Timeline {
             .or_else(|| self.tracks.get_audio_track_mut(track_id).map(|t| t as &mut dyn TrackItemsMut))
             .or_else(|| self.tracks.get_subtitle_track_mut(track_id).map(|t| t as &mut dyn TrackItemsMut))
     }
-}
-
-trait TrackItems {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey>;
-}
-
-trait TrackItemsMut {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey>;
-}
-
-impl TrackItems for crate::timeline::track::VideoTrack {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> { &self.items }
-}
-
-impl TrackItems for crate::timeline::track::AudioTrack {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> { &self.items }
-}
-
-impl TrackItems for crate::timeline::track::SubtitleTrack {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> { &self.items }
-}
-
-impl TrackItemsMut for crate::timeline::track::VideoTrack {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> { &mut self.items }
-}
-
-impl TrackItemsMut for crate::timeline::track::AudioTrack {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> { &mut self.items }
-}
-
-impl TrackItemsMut for crate::timeline::track::SubtitleTrack {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> { &mut self.items }
 }

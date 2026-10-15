@@ -5,10 +5,11 @@ use crate::ui::layout::*;
 use crate::ui::theme::Theme;
 use crate::gpu::scopes::{ScopesRenderer, ScopeMode};
 use crate::gpu::texture::GpuTexture;
-use crate::gpu::renderer::GpuRenderer;
+use std::sync::Arc;
 
 pub struct ScopesWidget {
-    scopes_renderer: Arc<ScopesRenderer>,
+    device: Option<Arc<wgpu::Device>>,
+    scopes_renderer: Option<Arc<ScopesRenderer>>,
     current_mode: ScopeMode,
     modes: Vec<ScopeMode>,
     input_texture: Option<GpuTexture>,
@@ -23,12 +24,9 @@ pub enum ScopesLayout { Single, Dual, Quad, Horizontal, Vertical }
 
 impl ScopesWidget {
     pub fn new() -> Self {
-        let renderer = Arc::new(ScopesRenderer::new(
-            GpuRenderer::new(1, 1, wgpu::PresentMode::AutoVsync, false).await.unwrap().device
-        ));
-        
         Self {
-            scopes_renderer: renderer,
+            device: None,
+            scopes_renderer: None,
             current_mode: ScopeMode::Waveform,
             modes: vec![ScopeMode::Waveform, ScopeMode::Parade, ScopeMode::Vectorscope, ScopeMode::Histogram],
             input_texture: None,
@@ -37,6 +35,16 @@ impl ScopesWidget {
             rect: Rect::new(0.0, 0.0, 0.0, 0.0),
             layout: ScopesLayout::Horizontal,
         }
+    }
+
+    /// Attach the GPU device used to build the scope renderer and its output textures.
+    /// Until this is called the widget stays inert (no GPU work, nothing drawn).
+    pub fn set_device(&mut self, device: &Arc<wgpu::Device>) {
+        self.device = Some(device.clone());
+        self.scopes_renderer = Some(Arc::new(ScopesRenderer::new(device.clone())));
+        // Output textures belong to the previous device, drop them.
+        self.output_textures.clear();
+        self.render_scopes();
     }
 
     pub fn set_input(&mut self, texture: GpuTexture) {
@@ -59,25 +67,29 @@ impl ScopesWidget {
     }
 
     fn render_scopes(&mut self) {
-        if let Some(input) = &self.input_texture {
-            for mode in &self.modes {
-                let output = self.output_textures.entry(*mode).or_insert_with(|| {
-                    GpuTexture::new(
-                        &self.scopes_renderer.device(),
-                        256, 256,
-                        wgpu::TextureFormat::Rgba8Unorm,
-                        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                        Some(&format!("Scope {:?}", mode)),
-                    )
-                });
-                
-                match mode {
-                    ScopeMode::Waveform => self.scopes_renderer.render_waveform(input, output, self.gain).ok(),
-                    ScopeMode::Parade => self.scopes_renderer.render_parade(input, output, self.gain).ok(),
-                    ScopeMode::Vectorscope => self.scopes_renderer.render_vectorscope(input, output, self.gain).ok(),
-                    ScopeMode::Histogram => self.scopes_renderer.render_histogram(input, output, self.gain).ok(),
-                };
-            }
+        let input = match &self.input_texture { Some(t) => t, None => return };
+        let device = match &self.device { Some(d) => d.clone(), None => return };
+        let renderer = match self.scopes_renderer.as_mut() { Some(r) => r, None => return };
+        let gain = self.gain;
+        let modes = self.modes.clone();
+
+        for mode in &modes {
+            let output = self.output_textures.entry(*mode).or_insert_with(|| {
+                GpuTexture::new(
+                    &device,
+                    256, 256,
+                    wgpu::TextureFormat::Rgba8Unorm,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                    Some(&format!("Scope {:?}", mode)),
+                )
+            });
+            
+            match mode {
+                ScopeMode::Waveform => renderer.render_waveform(input, output, gain).ok(),
+                ScopeMode::Parade => renderer.render_parade(input, output, gain).ok(),
+                ScopeMode::Vectorscope => renderer.render_vectorscope(input, output, gain).ok(),
+                ScopeMode::Histogram => renderer.render_histogram(input, output, gain).ok(),
+            };
         }
     }
 }

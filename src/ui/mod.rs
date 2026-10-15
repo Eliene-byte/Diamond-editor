@@ -14,8 +14,18 @@ pub mod inspector;
 pub mod media_pool_widget;
 pub mod node_graph;
 
-pub use widgets::*;
-pub use layout::*;
-pub use theme::*;
-pub use input::*;
-pub use pages::*;
+// Explicit re-exports to keep names unambiguous across submodules.
+
+pub use theme::{Theme, Shadow};
+pub use layout::{
+    Widget, LayoutContext, DrawContext, InputContext, TextRenderer, Constraints, LayoutResult,
+    Direction, Align, Flex, FlexChild, Grid, InputEvent, MouseButton, Key, KeyModifiers,
+};
+pub use widgets::{
+    Button, ButtonVariant, ButtonSize, Label, LabelSize, TextAlign, Input, InputType, Slider,
+    Checkbox, Separator, SeparatorOrientation, Tooltip, TooltipPosition, Panel, ScrollArea,
+};
+pub use input::{InputState, DragState, ClickDetector};
+pub use pages::{
+    CutPage, EditPage, EditPanel, LayoutMode, ColorPage, FusionPage, FairlightPage, DeliverPage,
+};

@@ -9,11 +9,23 @@ pub mod color;
 pub mod scopes;
 pub mod playback;
 
-pub use renderer::*;
-pub use pipeline::*;
-pub use texture::*;
-pub use buffer::*;
-pub use compute::*;
-pub use color::*;
-pub use scopes::*;
-pub use playback::*;
+// Explicit re-exports to avoid glob ambiguity.
+// Notably: `ColorGradeUniforms` is defined once in `buffer` and re-exported by
+// `renderer`; `ScopesUniforms` is defined once in `buffer`. `ComputePipelineEntry`
+// (buffer.rs) and `ComputePipeline` (compute.rs) are distinct types by design.
+
+pub use renderer::{
+    GpuRenderer, CpuRenderer, RendererBackend, RenderCommand, BlendMode, CompositeLayer,
+    ComputeParams, ComputePipelineType, RenderStats, HeadlessRenderer,
+};
+pub use buffer::{
+    BufferManager, UniformBuffer, StorageBuffer, FrameUniforms, InstanceData,
+    TransitionPushConstants, ScopesUniforms,
+};
+pub use texture::{TextureManager, GpuTexture, TexturePool, SamplerKey};
+pub use pipeline::{PipelineManager, PipelineKey, RenderPipeline, TransitionPipelineType, ComputeShaderType};
+pub use compute::ComputePipeline;
+pub use compute::ComputePipelineEntry;
+pub use color::ColorPipeline;
+pub use scopes::{ScopesRenderer, ScopeMode};
+pub use playback::{PlaybackEngine, DisplayFrame, FrameMetadata};

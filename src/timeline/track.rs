@@ -491,6 +491,10 @@ impl TrackContainer {
         self.audio_tracks.iter_mut().find(|t| t.id == track_id)
     }
 
+    pub fn get_subtitle_track_mut(&mut self, track_id: TrackId) -> Option<&mut SubtitleTrack> {
+        self.subtitle_tracks.iter_mut().find(|t| t.id == track_id)
+    }
+
     pub fn total_height(&self) -> f32 {
         self.video_tracks.iter().map(|t| t.height).sum::<f32>()
         + self.audio_tracks.iter().map(|t| t.height).sum::<f32>()

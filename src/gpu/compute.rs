@@ -1,23 +1,25 @@
 //! Compute pipelines for GPU processing
 
-use wgpu::{Device, Queue, ComputePipeline, BindGroup, BindGroupLayout, PipelineLayout};
+use wgpu::{Device, Queue, BindGroup, BindGroupLayout, PipelineLayout};
 use crate::gpu::texture::{TextureManager, GpuTexture};
 use crate::gpu::buffer::{UniformBuffer, StorageBuffer};
 use crate::gpu::renderer::ComputeParams;
 use crate::gpu::renderer::ComputePipelineType;
 use std::sync::Arc;
 
-pub struct ComputePipeline {
-    device: Arc<Device>,
-    pipelines: std::collections::HashMap<ComputePipelineType, ComputePipeline>,
-    bind_group_layouts: std::collections::HashMap<ComputePipelineType, Arc<BindGroupLayout>>,
-}
-
+/// One fully-built compute pipeline plus the bind group layout it was built against.
 #[derive(Debug, Clone)]
-pub struct ComputePipeline {
+pub struct ComputePipelineEntry {
     pub pipeline: Arc<wgpu::ComputePipeline>,
     pub layout: Arc<PipelineLayout>,
     pub bind_group_layout: Arc<BindGroupLayout>,
+}
+
+/// Registry of every compute pipeline kind the renderer can dispatch.
+pub struct ComputePipeline {
+    device: Arc<Device>,
+    pipelines: std::collections::HashMap<ComputePipelineType, ComputePipelineEntry>,
+    bind_group_layouts: std::collections::HashMap<ComputePipelineType, Arc<BindGroupLayout>>,
 }
 
 impl ComputePipeline {
@@ -36,7 +38,7 @@ impl ComputePipeline {
             ComputePipelineType::Transcode,
         ] {
             let (pipeline, layout, bind_group_layout) = Self::create_pipeline(&device, pipeline_type);
-            pipelines.insert(pipeline_type, ComputePipeline { pipeline: Arc::new(pipeline), layout: Arc::new(layout), bind_group_layout: Arc::new(bind_group_layout.clone()) });
+            pipelines.insert(pipeline_type, ComputePipelineEntry { pipeline: Arc::new(pipeline), layout: Arc::new(layout), bind_group_layout: Arc::new(bind_group_layout.clone()) });
             bind_group_layouts.insert(pipeline_type, Arc::new(bind_group_layout));
         }
         

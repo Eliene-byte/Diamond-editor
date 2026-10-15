@@ -273,7 +273,7 @@ pub struct FrameRange {
 }
 
 impl FrameRange {
-    pub const fn new(start: Frame, end: Frame) -> Self {
+    pub fn new(start: Frame, end: Frame) -> Self {
         assert!(start <= end, "start must be <= end");
         Self { start, end }
     }

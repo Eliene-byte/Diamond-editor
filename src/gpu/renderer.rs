@@ -75,18 +75,10 @@ pub struct CompositeLayer {
     pub transform: [f32; 16], // 4x4 matrix
 }
 
-#[derive(Debug, Clone)]
-pub struct ColorGradeUniforms {
-    pub lift: [f32; 3],
-    pub gamma: [f32; 3],
-    pub gain: [f32; 3],
-    pub offset: [f32; 3],
-    pub contrast: f32,
-    pub pivot: f32,
-    pub saturation: f32,
-    pub temperature: f32,
-    pub tint: f32,
-}
+// NOTE: `ColorGradeUniforms` lives in `crate::gpu::buffer` (it derives `Pod`/`Zeroable`
+// so it can be uploaded directly as a GPU uniform). It is re-exported here for
+// convenience because most renderer code refers to it alongside these commands.
+pub use crate::gpu::buffer::ColorGradeUniforms;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ComputePipelineType {
