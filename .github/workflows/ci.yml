@@ -68,15 +68,18 @@ jobs:
 
       # `cargo check` is used rather than `build`: it never invokes the linker, so it
       # validates every module without needing FFmpeg/SDL shared libs at link time.
+      # The exit status is recorded in a file rather than read back from
+      # `steps.<id>.outcome`, so the gate cannot be defeated by `continue-on-error`.
       - name: cargo check
-        id: check
         continue-on-error: true
         run: |
+          set -o pipefail
           if [ -n "${{ matrix.features }}" ]; then
             cargo check --features "${{ matrix.features }}" 2>&1 | tee check-output.txt
           else
             cargo check --no-default-features 2>&1 | tee check-output.txt
           fi
+          echo "${PIPESTATUS[0]:-$?}" > check-status.txt
 
       # Surface rustc diagnostics as check annotations. GitHub only keeps these in the
       # job log otherwise, which makes CI failures hard to diagnose from the API.
@@ -87,48 +90,49 @@ jobs:
             echo "::notice::cargo check produced no output file"
             exit 0
           fi
-          # Emit one annotation per error, capped to stay within annotation limits.
           grep -E '^error(\[E[0-9]+\])?:' check-output.txt | head -50 | while IFS= read -r line; do
             msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
             echo "::error title=cargo::${msg}"
           done
-          echo "---"
-          echo "Total errors: $(grep -cE '^error(\[E[0-9]+\])?:' check-output.txt || true)"
+          echo "::notice::total errors: $(grep -cE '^error(\[E[0-9]+\])?:' check-output.txt || true)"
 
       - name: Run tests
-        id: tests
         continue-on-error: true
         run: |
+          set -o pipefail
           if [ -n "${{ matrix.features }}" ]; then
             cargo test --lib --features "${{ matrix.features }}" 2>&1 | tee test-output.txt
           else
             cargo test --lib --no-default-features 2>&1 | tee test-output.txt
           fi
+          echo "${PIPESTATUS[0]:-$?}" > test-status.txt
 
       - name: Annotate test errors
         if: always()
         run: |
           [ -f test-output.txt ] || exit 0
-          grep -E '^error(\[E[0-9]+\])?:|panicked at|^test result: FAILED' test-output.txt | head -30 | while IFS= read -r line; do
+          grep -E '^error(\[E[0-9]+\])?:|panicked at|test result: FAILED' test-output.txt | head -30 | while IFS= read -r line; do
             msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
             echo "::error title=test::${msg}"
           done
 
-      # Fail the job only after annotations have been emitted, so the compiler
-      # output is always captured regardless of outcome.
+      # The single source of truth for whether this matrix entry passed.
       - name: Enforce results
         if: always()
         run: |
-          echo "check -> ${{ steps.check.outcome }}"
-          echo "tests -> ${{ steps.tests.outcome }}"
-          if [ "${{ steps.check.outcome }}" != "success" ]; then
-            echo "::error::cargo check failed"
+          check_status=$(cat check-status.txt 2>/dev/null || echo 99)
+          test_status=$(cat test-status.txt 2>/dev/null || echo 99)
+          echo "cargo check exit=$check_status"
+          echo "cargo test  exit=$test_status"
+          if [ "$check_status" != "0" ]; then
+            echo "::error::cargo check failed with exit code $check_status"
             exit 1
           fi
-          if [ "${{ steps.tests.outcome }}" != "success" ]; then
-            echo "::error::cargo test failed"
+          if [ "$test_status" != "0" ]; then
+            echo "::error::cargo test failed with exit code $test_status"
             exit 1
           fi
+          echo "all good"
 
   release-build:
     name: Release build
@@ -165,10 +169,11 @@ jobs:
             libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
 
       - name: cargo build (release)
-        id: build
         continue-on-error: true
         run: |
+          set -o pipefail
           cargo build --release --features "gpu-vulkan,codec-ffmpeg,audio-cpal" 2>&1 | tee build-output.txt
+          echo "${PIPESTATUS[0]:-$?}" > build-status.txt
 
       - name: Annotate build errors
         if: always()
@@ -194,8 +199,10 @@ jobs:
       - name: Enforce release build
         if: always()
         run: |
-          if [ "${{ steps.build.outcome }}" != "success" ]; then
-            echo "::error::release build failed"
+          status=$(cat build-status.txt 2>/dev/null || echo 99)
+          echo "release build exit=$status"
+          if [ "$status" != "0" ]; then
+            echo "::error::release build failed with exit code $status"
             exit 1
           fi
 

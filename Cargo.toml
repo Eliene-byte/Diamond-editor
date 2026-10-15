@@ -25,15 +25,15 @@ members = []
 
 [features]
 default = ["gpu-vulkan", "codec-ffmpeg", "audio-cpal"]
-# Hardware acceleration backends
-# NOTE: use `wgpu/vulkan` (native Vulkan), NOT `vulkan-portability` (which is the
-# MoltenVK shim intended for macOS and enables no backend on Linux).
-gpu-vulkan = ["wgpu/vulkan"]
+# Hardware acceleration backends.
+# wgpu 23 backend feature names are: vulkan-portability, metal, dx12, angle.
+# (`glsl` is a shader-language feature, NOT a backend.)
+gpu-vulkan = ["wgpu/vulkan-portability"]
 gpu-metal = ["wgpu/metal"]
 gpu-dx12 = ["wgpu/dx12"]
-gpu-gl = ["wgpu/glsl"]
+gpu-gl = ["wgpu/angle"]
 # Software rendering fallback (works on ALL hardware)
-gpu-software = ["wgpu/glsl"]
+gpu-software = ["wgpu/angle"]
 # Codecs
 codec-ffmpeg = ["dep:ffmpeg-next"]
 codec-system = []
