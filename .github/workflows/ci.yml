@@ -173,12 +173,23 @@ jobs:
       - name: Annotate build errors
         if: always()
         run: |
-          [ -f build-output.txt ] || exit 0
-          grep -E '^error(\[E[0-9]+\])?:|cannot find|undefined reference|collect2:|ld returned|rust-lld: error' build-output.txt \
-            | head -40 | while IFS= read -r line; do
+          if [ ! -f build-output.txt ]; then
+            echo "::error::no build-output.txt was produced (step likely killed)"
+            exit 0
+          fi
+          echo "::notice::build-output.txt is $(wc -l < build-output.txt) lines"
+          # Emit matching diagnostics first...
+          grep -E '^error(\[E[0-9]+\])?:|cannot find|undefined reference|collect2:|ld returned|No space|Killed|virtual memory exhausted' build-output.txt \
+            | head -25 | while IFS= read -r line; do
               msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
               echo "::error title=release-build::${msg}"
             done
+          # ...then always surface the tail, so OOM/kill cases are still visible.
+          echo "::notice::--- tail of build output ---"
+          tail -n 15 build-output.txt | while IFS= read -r line; do
+            msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
+            echo "::notice title=log::${msg}"
+          done
 
       - name: Enforce release build
         if: always()
