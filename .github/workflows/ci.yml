@@ -165,7 +165,28 @@ jobs:
             libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
 
       - name: cargo build (release)
-        run: cargo build --release --features "gpu-vulkan,codec-ffmpeg,audio-cpal"
+        id: build
+        continue-on-error: true
+        run: |
+          cargo build --release --features "gpu-vulkan,codec-ffmpeg,audio-cpal" 2>&1 | tee build-output.txt
+
+      - name: Annotate build errors
+        if: always()
+        run: |
+          [ -f build-output.txt ] || exit 0
+          grep -E '^error(\[E[0-9]+\])?:|cannot find|undefined reference|collect2:|ld returned|rust-lld: error' build-output.txt \
+            | head -40 | while IFS= read -r line; do
+              msg=$(printf '%s' "$line" | tr -d '\r' | cut -c1-240)
+              echo "::error title=release-build::${msg}"
+            done
+
+      - name: Enforce release build
+        if: always()
+        run: |
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo "::error::release build failed"
+            exit 1
+          fi
 
       - name: Check binary size
         run: |

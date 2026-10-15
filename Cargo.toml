@@ -9,7 +9,9 @@ repository = "https://github.com/Eliene-byte/Diamond-editor"
 
 [profile.release]
 opt-level = "z"
-lto = true
+# `thin` LTO keeps binary size close to full LTO but uses far less peak memory,
+# which matters on CI runners where full LTO over this dependency graph can OOM.
+lto = "thin"
 codegen-units = 1
 strip = true
 panic = "abort"
