@@ -142,9 +142,21 @@ impl Default for Theme {
             radius_md: 4.0,
             radius_lg: 8.0,
             radius_full: 9999.0,
-            shadow_sm: Shadow { offset: [0.0, 1.0], blur: 2.0, color: rgba(0.0, 0.0, 0.0, 0.3) },
-            shadow_md: Shadow { offset: [0.0, 4.0], blur: 8.0, color: rgba(0.0, 0.0, 0.0, 0.4) },
-            shadow_lg: Shadow { offset: [0.0, 8.0], blur: 16.0, color: rgba(0.0, 0.0, 0.0, 0.5) },
+            shadow_sm: Shadow {
+                offset: [0.0, 1.0],
+                blur: 2.0,
+                color: rgba(0.0, 0.0, 0.0, 0.3),
+            },
+            shadow_md: Shadow {
+                offset: [0.0, 4.0],
+                blur: 8.0,
+                color: rgba(0.0, 0.0, 0.0, 0.4),
+            },
+            shadow_lg: Shadow {
+                offset: [0.0, 8.0],
+                blur: 16.0,
+                color: rgba(0.0, 0.0, 0.0, 0.5),
+            },
             font_family: "Inter".into(),
             font_size_xs: 11.0,
             font_size_sm: 12.0,
@@ -188,7 +200,7 @@ impl Theme {
         t.clip_generator = hex("#d6f0f0");
         t
     }
-    
+
     pub fn high_contrast() -> Self {
         let mut t = Self::default();
         t.bg_primary = hex("#000000");
@@ -200,7 +212,7 @@ impl Theme {
         t.accent = hex("#ffff00");
         t
     }
-    
+
     pub fn clip_color_for_type(&self, media_type: crate::core::types::MediaType) -> [f32; 4] {
         match media_type {
             crate::core::types::MediaType::Video => self.clip_video,
@@ -211,7 +223,7 @@ impl Theme {
             _ => self.clip_video,
         }
     }
-    
+
     pub fn label_color(&self, label: crate::core::types::ColorLabel) -> [f32; 4] {
         match label {
             crate::core::types::ColorLabel::Red => self.label_red,

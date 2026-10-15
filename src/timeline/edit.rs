@@ -1,9 +1,9 @@
 //! Professional editing operations - ripple, roll, slip, slide, etc.
 
-use crate::core::id::{TrackId, TrackItemId, ClipId, TransitionId};
-use crate::core::time::{Frame, FrameRange, Duration};
-use crate::core::types::{EditOperation, TrimEdge, TrackType};
 use crate::core::error::{Result, TimelineError};
+use crate::core::id::{ClipId, TrackId, TrackItemId, TransitionId};
+use crate::core::time::{Duration, Frame, FrameRange};
+use crate::core::types::{EditOperation, TrackType, TrimEdge};
 use crate::timeline::clip::{Timeline, TrackItems, TrackItemsMut};
 use crate::timeline::track::{TrackContainer, TrackItem, TrackItemKey};
 use std::collections::HashMap;
@@ -68,28 +68,40 @@ impl Editor {
         edge: TrimEdge,
         new_position: Frame,
     ) -> Result<EditOperation> {
-        let item = timeline.get_item(item_id)
+        let item = timeline
+            .get_item(item_id)
             .ok_or(TimelineError::ClipNotFound(item_id.to_string()))?;
-        
+
         let track_id = item.track_id;
         let old_position = match edge {
             TrimEdge::In => item.timeline_in(),
             TrimEdge::Out => item.timeline_out(),
         };
-        
+
         let delta = new_position - old_position;
-        if delta == Frame::ZERO { return Ok(EditOperation::TrimClip { 
-            item_id: item_id, edge, old: old_position, new: new_position 
-        }); }
-        
+        if delta == Frame::ZERO {
+            return Ok(EditOperation::TrimClip {
+                item_id: item_id,
+                edge,
+                old: old_position,
+                new: new_position,
+            });
+        }
+
         // Check if trim is valid
         if edge == TrimEdge::In && new_position >= item.timeline_out() {
-            return Err(TimelineError::InvalidTrim("In point cannot be at or after out point".into()).into());
+            return Err(TimelineError::InvalidTrim(
+                "In point cannot be at or after out point".into(),
+            )
+            .into());
         }
         if edge == TrimEdge::Out && new_position <= item.timeline_in() {
-            return Err(TimelineError::InvalidTrim("Out point cannot be at or before in point".into()).into());
+            return Err(TimelineError::InvalidTrim(
+                "Out point cannot be at or before in point".into(),
+            )
+            .into());
         }
-        
+
         // Get all items after the edit point on the same track
         let mut affected = Vec::new();
         if let Some(track) = timeline.get_track(track_id) {
@@ -97,7 +109,7 @@ impl Editor {
                 TrimEdge::In => item.timeline_in(),
                 TrimEdge::Out => item.timeline_out(),
             };
-            
+
             for (_, key) in track.items().range(start_search..) {
                 if let Some(other) = timeline.item_by_key(*key) {
                     if other.id != item_id {
@@ -106,10 +118,10 @@ impl Editor {
                 }
             }
         }
-        
+
         // Apply trim to target item
         timeline.trim_clip(item_id, edge, new_position)?;
-        
+
         // Ripple subsequent items
         for affected_id in affected {
             if let Some(affected_item) = timeline.get_item_mut(affected_id) {
@@ -119,25 +131,35 @@ impl Editor {
             // borrow above: `reindex_item` needs `&mut Timeline`.
             timeline.reindex_item(track_id, affected_id);
         }
-        
+
         timeline.update_duration();
         timeline.dirty = true;
-        
-        Ok(EditOperation::TrimClip { item_id: item_id, edge, old: old_position, new: new_position })
+
+        Ok(EditOperation::TrimClip {
+            item_id: item_id,
+            edge,
+            old: old_position,
+            new: new_position,
+        })
     }
 
     /// Ripple delete - removes clip and closes gap
-    pub fn ripple_delete(&self, timeline: &mut Timeline, item_id: TrackItemId) -> Result<EditOperation> {
-        let item = timeline.get_item(item_id)
+    pub fn ripple_delete(
+        &self,
+        timeline: &mut Timeline,
+        item_id: TrackItemId,
+    ) -> Result<EditOperation> {
+        let item = timeline
+            .get_item(item_id)
             .ok_or(TimelineError::ClipNotFound(item_id.to_string()))?;
-        
+
         let track_id = item.track_id;
         let gap_duration = item.timeline_duration();
         let gap_start = item.timeline_in();
-        
+
         // Remove the clip
         timeline.remove_clip(item_id);
-        
+
         // Shift subsequent clips left. Collect the ids first so the immutable track
         // borrow does not overlap the later item mutations.
         let to_shift: Vec<TrackItemId> = {
@@ -161,10 +183,10 @@ impl Editor {
             }
             timeline.reindex_item(track_id, affected_id);
         }
-        
+
         timeline.update_duration();
         timeline.dirty = true;
-        
+
         Ok(EditOperation::RemoveClip { item_id: item_id })
     }
 
@@ -184,7 +206,7 @@ impl Editor {
                 }
             }
         }
-        
+
         for affected_id in to_shift {
             // Collect the values first: `get_item_mut` and `get_track_mut` would
             // otherwise both borrow the timeline mutably at the same time.
@@ -194,7 +216,11 @@ impl Editor {
                         affected_item.timeline_in() + duration,
                         affected_item.timeline_out() + duration,
                     );
-                    (affected_item.timeline_in() - duration, affected_item.timeline_in(), affected_item.key)
+                    (
+                        affected_item.timeline_in() - duration,
+                        affected_item.timeline_in(),
+                        affected_item.key,
+                    )
                 }
                 None => continue,
             };
@@ -203,7 +229,7 @@ impl Editor {
                 track.items_mut().insert(new_start, key);
             }
         }
-        
+
         timeline.update_duration();
         timeline.dirty = true;
         Ok(())
@@ -240,15 +266,23 @@ impl Editor {
 
         // Must be adjacent
         if left_out != right_in {
-            return Err(TimelineError::InvalidOperation("Clips must be adjacent for roll edit".into()).into());
+            return Err(TimelineError::InvalidOperation(
+                "Clips must be adjacent for roll edit".into(),
+            )
+            .into());
         }
         if left_clip != right_clip {
-            return Err(TimelineError::InvalidOperation("Roll edit only works on same source clip".into()).into());
+            return Err(TimelineError::InvalidOperation(
+                "Roll edit only works on same source clip".into(),
+            )
+            .into());
         }
 
         // Check bounds
         if new_edit_point <= left_in || new_edit_point >= right_out {
-            return Err(TimelineError::InvalidOperation("New edit point out of bounds".into()).into());
+            return Err(
+                TimelineError::InvalidOperation("New edit point out of bounds".into()).into(),
+            );
         }
 
         let left_source_duration = new_edit_point - left_in;
@@ -278,7 +312,9 @@ impl Editor {
         if right_key.is_some() {
             if let Some(track) = timeline.get_track_mut(left_track) {
                 track.items_mut().remove(&right_in);
-                track.items_mut().insert(new_edit_point, right_key.expect("checked above"));
+                track
+                    .items_mut()
+                    .insert(new_edit_point, right_key.expect("checked above"));
             }
         }
 
@@ -354,7 +390,10 @@ impl Editor {
         let new_position = old_position + timeline_delta;
 
         if new_position < Frame::ZERO {
-            return Err(TimelineError::InvalidOperation("Cannot slide before timeline start".into()).into());
+            return Err(TimelineError::InvalidOperation(
+                "Cannot slide before timeline start".into(),
+            )
+            .into());
         }
 
         // Check for collisions
@@ -374,7 +413,9 @@ impl Editor {
             found
         };
         if collision {
-            return Err(TimelineError::OverlapNotAllowed("Slide would cause overlap".into()).into());
+            return Err(
+                TimelineError::OverlapNotAllowed("Slide would cause overlap".into()).into(),
+            );
         }
 
         // Move item
@@ -420,7 +461,9 @@ impl Editor {
 
         let _ = source_duration;
 
-        Ok(EditOperation::RemoveClip { item_id: old_item_id })
+        Ok(EditOperation::RemoveClip {
+            item_id: old_item_id,
+        })
     }
 
     /// Fit to fill - change clip speed to fill duration
@@ -450,8 +493,7 @@ impl Editor {
 
         if let Some(item_mut) = timeline.get_item_mut(item_id) {
             item_mut.speed = speed;
-            item_mut.timeline_range =
-                FrameRange::new(timeline_in, timeline_in + target_duration);
+            item_mut.timeline_range = FrameRange::new(timeline_in, timeline_in + target_duration);
         }
 
         timeline.reindex_item(track_id, item_id);
@@ -489,17 +531,22 @@ impl Editor {
         };
 
         if left_track != right_track {
-            return Err(TimelineError::InvalidOperation("Clips must be on same track".into()).into());
+            return Err(
+                TimelineError::InvalidOperation("Clips must be on same track".into()).into(),
+            );
         }
         if left_out != right_in {
             return Err(TimelineError::InvalidOperation("Clips must be adjacent".into()).into());
         }
         if left_clip == right_clip {
-            return Err(TimelineError::InvalidOperation("Cannot add transition within same clip".into()).into());
+            return Err(TimelineError::InvalidOperation(
+                "Cannot add transition within same clip".into(),
+            )
+            .into());
         }
-        
+
         let transition_id = TransitionId::generate();
-        
+
         // Apply to items
         if let Some(left_mut) = timeline.get_item_mut(left_item_id) {
             left_mut.transitions.1 = Some(transition_id);
@@ -507,9 +554,9 @@ impl Editor {
         if let Some(right_mut) = timeline.get_item_mut(right_item_id) {
             right_mut.transitions.0 = Some(transition_id);
         }
-        
+
         timeline.dirty = true;
-        
+
         Ok(transition_id)
     }
 
@@ -532,13 +579,18 @@ impl Editor {
     }
 
     /// Get snap points for a frame
-    pub fn snap_points(&self, timeline: &Timeline, frame: Frame, track_id: Option<TrackId>) -> Vec<Frame> {
+    pub fn snap_points(
+        &self,
+        timeline: &Timeline,
+        frame: Frame,
+        track_id: Option<TrackId>,
+    ) -> Vec<Frame> {
         let mut points = Vec::new();
-        
+
         // Timeline start/end
         points.push(Frame::ZERO);
         points.push(timeline.duration);
-        
+
         // Markers
         for marker in timeline.markers.values() {
             points.push(marker.position);
@@ -546,16 +598,20 @@ impl Editor {
                 points.push(marker.position + dur);
             }
         }
-        
+
         // Track items
         let tracks = if let Some(tid) = track_id {
             vec![tid]
         } else {
-            timeline.tracks.video_tracks.iter().map(|t| t.id)
+            timeline
+                .tracks
+                .video_tracks
+                .iter()
+                .map(|t| t.id)
                 .chain(timeline.tracks.audio_tracks.iter().map(|t| t.id))
                 .collect()
         };
-        
+
         for tid in tracks {
             if let Some(track) = timeline.get_track(tid) {
                 for (_, key) in track.items() {
@@ -566,7 +622,7 @@ impl Editor {
                 }
             }
         }
-        
+
         points.sort();
         points.dedup();
         points
@@ -574,17 +630,20 @@ impl Editor {
 
     /// Snap frame to nearest point
     pub fn snap(&self, timeline: &Timeline, frame: Frame, track_id: Option<TrackId>) -> Frame {
-        if !self.snap_enabled { return frame; }
-        
+        if !self.snap_enabled {
+            return frame;
+        }
+
         let points = self.snap_points(timeline, frame, track_id);
-        let threshold = Frame((self.snap_threshold * timeline.settings.frame_rate.fps_f32()) as i64);
-        
+        let threshold =
+            Frame((self.snap_threshold * timeline.settings.frame_rate.fps_f32()) as i64);
+
         for point in points {
             if (frame.0 - point.0).abs() <= threshold.0 {
                 return point;
             }
         }
-        
+
         frame
     }
 }

@@ -5,10 +5,10 @@
 //! available in every feature configuration. The backends that produce them
 //! live in [`crate::media::decoder`] and are gated behind `codec-ffmpeg`.
 
-use crate::core::color::PixelFormat;
-use crate::core::time::Frame;
-use crate::core::id::ClipId;
 use crate::core::color::ColorSpace;
+use crate::core::color::PixelFormat;
+use crate::core::id::ClipId;
+use crate::core::time::Frame;
 use std::sync::Arc;
 
 /// Decoded video frame
@@ -42,71 +42,97 @@ impl VideoFrameData {
             PixelFormat::Rgba8 | PixelFormat::Rgb8 => {
                 let stride = (width * 4) as usize;
                 let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
+                (
+                    1,
+                    [vec![0; size], Vec::new(), Vec::new(), Vec::new()],
+                    [stride, 0, 0, 0],
+                )
             }
             PixelFormat::Rgba16F => {
                 let stride = (width * 8) as usize;
                 let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
+                (
+                    1,
+                    [vec![0; size], Vec::new(), Vec::new(), Vec::new()],
+                    [stride, 0, 0, 0],
+                )
             }
             PixelFormat::Rgba32F => {
                 let stride = (width * 16) as usize;
                 let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
+                (
+                    1,
+                    [vec![0; size], Vec::new(), Vec::new(), Vec::new()],
+                    [stride, 0, 0, 0],
+                )
             }
             PixelFormat::Yuv420_8 | PixelFormat::Yuv420_10 | PixelFormat::Yuv420_12 => {
                 let y_stride = width as usize;
                 let uv_stride = (width / 2) as usize;
                 let y_size = y_stride * height as usize;
                 let uv_size = uv_stride * (height / 2) as usize;
-                (3, [
-                    vec![0; y_size],
-                    vec![0; uv_size],
-                    vec![0; uv_size],
-                    Vec::new(),
-                ], [y_stride, uv_stride, uv_stride, 0])
+                (
+                    3,
+                    [
+                        vec![0; y_size],
+                        vec![0; uv_size],
+                        vec![0; uv_size],
+                        Vec::new(),
+                    ],
+                    [y_stride, uv_stride, uv_stride, 0],
+                )
             }
             PixelFormat::Yuv422_8 | PixelFormat::Yuv422_10 | PixelFormat::Yuv422_12 => {
                 let y_stride = width as usize;
                 let uv_stride = (width / 2) as usize;
                 let y_size = y_stride * height as usize;
                 let uv_size = uv_stride * height as usize;
-                (3, [
-                    vec![0; y_size],
-                    vec![0; uv_size],
-                    vec![0; uv_size],
-                    Vec::new(),
-                ], [y_stride, uv_stride, uv_stride, 0])
+                (
+                    3,
+                    [
+                        vec![0; y_size],
+                        vec![0; uv_size],
+                        vec![0; uv_size],
+                        Vec::new(),
+                    ],
+                    [y_stride, uv_stride, uv_stride, 0],
+                )
             }
             PixelFormat::Yuv444_8 | PixelFormat::Yuv444_10 | PixelFormat::Yuv444_12 => {
                 let stride = width as usize;
                 let size = stride * height as usize;
-                (3, [
-                    vec![0; size],
-                    vec![0; size],
-                    vec![0; size],
-                    Vec::new(),
-                ], [stride, stride, stride, 0])
+                (
+                    3,
+                    [vec![0; size], vec![0; size], vec![0; size], Vec::new()],
+                    [stride, stride, stride, 0],
+                )
             }
             PixelFormat::P010 => {
                 let y_stride = width as usize;
                 let uv_stride = (width / 2) as usize;
                 let y_size = y_stride * height as usize;
                 let uv_size = uv_stride * (height / 2) as usize * 2; // 10-bit packed
-                (2, [
-                    vec![0; y_size],
-                    vec![0; uv_size],
-                    Vec::new(),
-                    Vec::new(),
-                ], [y_stride, uv_stride, 0, 0])
+                (
+                    2,
+                    [vec![0; y_size], vec![0; uv_size], Vec::new(), Vec::new()],
+                    [y_stride, uv_stride, 0, 0],
+                )
             }
             _ => {
                 let stride = (width * 4) as usize;
                 let size = stride * height as usize;
-                (1, [vec![0; size], Vec::new(), Vec::new(), Vec::new()], [stride, 0, 0, 0])
+                (
+                    1,
+                    [vec![0; size], Vec::new(), Vec::new(), Vec::new()],
+                    [stride, 0, 0, 0],
+                )
             }
         };
-        Self { planes, strides, format }
+        Self {
+            planes,
+            strides,
+            format,
+        }
     }
 
     pub fn plane(&self, i: usize) -> &[u8] {
@@ -184,7 +210,10 @@ impl AudioFrameData {
 
     /// A single channel, or an empty slice when the index is out of range.
     pub fn channel(&self, index: usize) -> &[f32] {
-        self.channels.get(index).map(|v| v.as_slice()).unwrap_or(&[])
+        self.channels
+            .get(index)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Zero every sample while keeping the channel layout.

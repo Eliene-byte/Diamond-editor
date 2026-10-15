@@ -1,31 +1,31 @@
 //! Custom lightweight UI framework for DaVinci Clone
 //! No egui dependency - custom immediate mode on wgpu for minimum size
 
-pub mod widgets;
-pub mod layout;
-pub mod theme;
 pub mod input;
+pub mod inspector;
+pub mod layout;
+pub mod media_pool_widget;
+pub mod mixer;
+pub mod node_graph;
 pub mod pages;
+pub mod scopes_widget;
+pub mod theme;
 pub mod timeline_widget;
 pub mod viewer;
-pub mod scopes_widget;
-pub mod mixer;
-pub mod inspector;
-pub mod media_pool_widget;
-pub mod node_graph;
+pub mod widgets;
 
 // Explicit re-exports to keep names unambiguous across submodules.
 
-pub use theme::{Theme, Shadow};
+pub use input::{ClickDetector, DragState, InputState};
 pub use layout::{
-    Widget, LayoutContext, DrawContext, InputContext, TextRenderer, Constraints, LayoutResult,
-    Direction, Align, Flex, FlexChild, Grid, InputEvent, MouseButton, Key, KeyModifiers,
+    Align, Constraints, Direction, DrawContext, Flex, FlexChild, Grid, InputContext, InputEvent,
+    Key, KeyModifiers, LayoutContext, LayoutResult, MouseButton, TextRenderer, Widget,
 };
-pub use widgets::{
-    Button, ButtonVariant, ButtonSize, Label, LabelSize, TextAlign, Input, InputType, Slider,
-    Checkbox, Separator, SeparatorOrientation, Tooltip, TooltipPosition, Panel, ScrollArea,
-};
-pub use input::{InputState, DragState, ClickDetector};
 pub use pages::{
-    CutPage, EditPage, EditPanel, LayoutMode, ColorPage, FusionPage, FairlightPage, DeliverPage,
+    ColorPage, CutPage, DeliverPage, EditPage, EditPanel, FairlightPage, FusionPage, LayoutMode,
+};
+pub use theme::{Shadow, Theme};
+pub use widgets::{
+    Button, ButtonSize, ButtonVariant, Checkbox, Input, InputType, Label, LabelSize, Panel,
+    ScrollArea, Separator, SeparatorOrientation, Slider, TextAlign, Tooltip, TooltipPosition,
 };

@@ -84,11 +84,13 @@ fn main() -> Result<()> {
     let event_loop = winit::event_loop::EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-    let window = Arc::new(event_loop.create_window(
-        winit::window::WindowAttributes::default()
-            .with_title(format!("{APP_NAME} v{VERSION}"))
-            .with_inner_size(winit::dpi::LogicalSize::new(1920, 1080)),
-    )?);
+    let window = Arc::new(
+        event_loop.create_window(
+            winit::window::WindowAttributes::default()
+                .with_title(format!("{APP_NAME} v{VERSION}"))
+                .with_inner_size(winit::dpi::LogicalSize::new(1920, 1080)),
+        )?,
+    );
 
     let present_mode = if config.gpu.vsync {
         wgpu::PresentMode::AutoVsync
@@ -168,10 +170,7 @@ fn main() -> Result<()> {
                     };
 
                     if let Ok(mut r) = renderer.write() {
-                        let playhead = timeline
-                            .read()
-                            .map(|tl| tl.playhead)
-                            .unwrap_or_default();
+                        let playhead = timeline.read().map(|tl| tl.playhead).unwrap_or_default();
                         let _ = page_widget;
                         let _ = r.render_frame(playhead);
                     }

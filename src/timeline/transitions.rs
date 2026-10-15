@@ -1,8 +1,8 @@
 //! Transitions between clips
 
-use crate::core::id::{TransitionId, TrackItemId};
+use crate::core::id::{TrackItemId, TransitionId};
 use crate::core::time::{Frame, FrameRange};
-use crate::core::types::{EffectType, EffectParams, EffectValue, Interpolation, Easing};
+use crate::core::types::{Easing, EffectParams, EffectType, EffectValue, Interpolation};
 use crate::timeline::clip::Timeline;
 use std::collections::HashMap;
 
@@ -88,20 +88,34 @@ impl Transition {
     fn default_params(transition_type: TransitionType) -> EffectParams {
         use std::collections::HashMap;
         let mut params = HashMap::new();
-        
+
         match transition_type {
-            TransitionType::CrossDissolve | TransitionType::FilmDissolve | TransitionType::AdditiveDissolve => {
+            TransitionType::CrossDissolve
+            | TransitionType::FilmDissolve
+            | TransitionType::AdditiveDissolve => {
                 params.insert("ease".into(), EffectValue::Float(0.5));
             }
-            TransitionType::WipeLeft | TransitionType::WipeRight | TransitionType::WipeUp | TransitionType::WipeDown => {
+            TransitionType::WipeLeft
+            | TransitionType::WipeRight
+            | TransitionType::WipeUp
+            | TransitionType::WipeDown => {
                 params.insert("border_width".into(), EffectValue::Float(0.0));
-                params.insert("border_color".into(), EffectValue::Color(1.0, 1.0, 1.0, 1.0));
+                params.insert(
+                    "border_color".into(),
+                    EffectValue::Color(1.0, 1.0, 1.0, 1.0),
+                );
                 params.insert("feather".into(), EffectValue::Float(0.0));
             }
-            TransitionType::SlideLeft | TransitionType::SlideRight | TransitionType::SlideUp | TransitionType::SlideDown => {
+            TransitionType::SlideLeft
+            | TransitionType::SlideRight
+            | TransitionType::SlideUp
+            | TransitionType::SlideDown => {
                 params.insert("ease".into(), EffectValue::Float(0.5));
             }
-            TransitionType::PushLeft | TransitionType::PushRight | TransitionType::PushUp | TransitionType::PushDown => {
+            TransitionType::PushLeft
+            | TransitionType::PushRight
+            | TransitionType::PushUp
+            | TransitionType::PushDown => {
                 params.insert("ease".into(), EffectValue::Float(0.5));
                 params.insert("overlap".into(), EffectValue::Bool(true));
             }
@@ -109,12 +123,14 @@ impl Transition {
                 params.insert("color".into(), EffectValue::Color(0.0, 0.0, 0.0, 1.0));
                 params.insert("ease".into(), EffectValue::Float(0.5));
             }
-            TransitionType::CrossFade | TransitionType::ConstantPower | TransitionType::ConstantGain => {
+            TransitionType::CrossFade
+            | TransitionType::ConstantPower
+            | TransitionType::ConstantGain => {
                 params.insert("curve".into(), EffectValue::Float(0.5));
             }
             _ => {}
         }
-        
+
         EffectParams {
             effect_type: EffectType::CrossDissolve,
             parameters: params,
@@ -123,9 +139,10 @@ impl Transition {
 
     pub fn range(&self, edit_point: Frame) -> FrameRange {
         match self.alignment {
-            TransitionAlignment::CenterAtCut => {
-                FrameRange::new(edit_point - self.duration / 2, edit_point + self.duration / 2)
-            }
+            TransitionAlignment::CenterAtCut => FrameRange::new(
+                edit_point - self.duration / 2,
+                edit_point + self.duration / 2,
+            ),
             TransitionAlignment::StartAtCut => {
                 FrameRange::new(edit_point, edit_point + self.duration)
             }
@@ -137,8 +154,10 @@ impl Transition {
 
     pub fn progress_at(&self, frame: Frame, edit_point: Frame) -> f32 {
         let range = self.range(edit_point);
-        if !range.contains(frame) { return 0.0; }
-        
+        if !range.contains(frame) {
+            return 0.0;
+        }
+
         let progress = (frame - range.start).0 as f32 / self.duration.0 as f32;
         progress.clamp(0.0, 1.0)
     }
@@ -149,11 +168,16 @@ impl Transition {
     }
 
     fn apply_easing(&self, t: f32) -> f32 {
-        let ease = self.params.parameters.get("ease").and_then(|v| match v {
-            EffectValue::Float(f) => Some(*f),
-            _ => None,
-        }).unwrap_or(0.5);
-        
+        let ease = self
+            .params
+            .parameters
+            .get("ease")
+            .and_then(|v| match v {
+                EffectValue::Float(f) => Some(*f),
+                _ => None,
+            })
+            .unwrap_or(0.5);
+
         // Smoothstep with variable ease
         if t < ease {
             t * t / (2.0 * ease)
@@ -172,7 +196,9 @@ pub struct TransitionManager {
 
 impl TransitionManager {
     pub fn new() -> Self {
-        Self { transitions: HashMap::new() }
+        Self {
+            transitions: HashMap::new(),
+        }
     }
 
     pub fn add(&mut self, transition: Transition) -> TransitionId {
@@ -194,12 +220,14 @@ impl TransitionManager {
     }
 
     pub fn at_edit_point(&self, left: TrackItemId, right: TrackItemId) -> Option<&Transition> {
-        self.transitions.values()
+        self.transitions
+            .values()
             .find(|t| t.left_item == left && t.right_item == right)
     }
 
     pub fn for_item(&self, item: TrackItemId) -> Vec<&Transition> {
-        self.transitions.values()
+        self.transitions
+            .values()
             .filter(|t| t.left_item == item || t.right_item == item)
             .collect()
     }
@@ -208,7 +236,9 @@ impl TransitionManager {
         if let Some(t) = self.transitions.get_mut(&id) {
             f(t);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn set_duration(&mut self, id: TransitionId, duration: Frame) -> bool {
@@ -242,7 +272,7 @@ impl TransitionRenderer {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let mut pipelines = HashMap::new();
         let mut bind_group_layouts = HashMap::new();
-        
+
         // Create pipelines for each transition type
         for tt in [
             TransitionType::CrossDissolve,
@@ -255,8 +285,11 @@ impl TransitionRenderer {
             pipelines.insert(tt, pipeline);
             bind_group_layouts.insert(tt, layout);
         }
-        
-        Self { pipelines, bind_group_layouts }
+
+        Self {
+            pipelines,
+            bind_group_layouts,
+        }
     }
 
     fn create_pipeline(
@@ -269,7 +302,7 @@ impl TransitionRenderer {
             label: Some(&format!("Transition {:?}", transition_type)),
             source: wgpu::ShaderSource::Wgsl(shader.into()),
         });
-        
+
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Transition Bind Group Layout"),
             entries: &[
@@ -305,13 +338,13 @@ impl TransitionRenderer {
                 },
             ],
         });
-        
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Transition Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-        
+
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(&format!("Transition {:?} Pipeline", transition_type)),
             layout: Some(&pipeline_layout),
@@ -345,17 +378,27 @@ impl TransitionRenderer {
             multiview: None,
             cache: None,
         });
-        
+
         (pipeline, bind_group_layout)
     }
 
     fn shader_for_type(transition_type: TransitionType) -> &'static str {
         match transition_type {
-            TransitionType::CrossDissolve => include_str!("../assets/shaders/transitions/cross_dissolve.wgsl"),
-            TransitionType::WipeLeft => include_str!("../assets/shaders/transitions/wipe_left.wgsl"),
-            TransitionType::SlideLeft => include_str!("../assets/shaders/transitions/slide_left.wgsl"),
-            TransitionType::PushLeft => include_str!("../assets/shaders/transitions/push_left.wgsl"),
-            TransitionType::DipToColor => include_str!("../assets/shaders/transitions/dip_to_color.wgsl"),
+            TransitionType::CrossDissolve => {
+                include_str!("../assets/shaders/transitions/cross_dissolve.wgsl")
+            }
+            TransitionType::WipeLeft => {
+                include_str!("../assets/shaders/transitions/wipe_left.wgsl")
+            }
+            TransitionType::SlideLeft => {
+                include_str!("../assets/shaders/transitions/slide_left.wgsl")
+            }
+            TransitionType::PushLeft => {
+                include_str!("../assets/shaders/transitions/push_left.wgsl")
+            }
+            TransitionType::DipToColor => {
+                include_str!("../assets/shaders/transitions/dip_to_color.wgsl")
+            }
             _ => include_str!("../assets/shaders/transitions/cross_dissolve.wgsl"),
         }
     }
@@ -373,18 +416,30 @@ impl TransitionRenderer {
         output_view: &wgpu::TextureView,
     ) {
         if let Some(pipeline) = self.pipelines.get(&transition.transition_type) {
-            let layout = self.bind_group_layouts.get(&transition.transition_type).unwrap();
-            
+            let layout = self
+                .bind_group_layouts
+                .get(&transition.transition_type)
+                .unwrap();
+
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Transition Bind Group"),
                 layout,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(left_texture) },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(right_texture) },
-                    wgpu::BindGroupEntry { binding: 2, resource: params_buffer.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(left_texture),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(right_texture),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: params_buffer.as_entire_binding(),
+                    },
                 ],
             });
-            
+
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Transition Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -399,7 +454,7 @@ impl TransitionRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            
+
             render_pass.set_pipeline(pipeline);
             render_pass.set_bind_group(0, &bind_group, &[]);
             render_pass.draw(0..4, 0..1);

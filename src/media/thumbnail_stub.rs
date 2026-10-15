@@ -4,9 +4,9 @@
 //! is inert. The API mirrors `thumbnail.rs` exactly so the rest of the crate
 //! compiles unchanged, and generation reports a clear error.
 
+use crate::core::error::{AppError, MediaError, Result};
 use crate::core::id::ClipId;
 use crate::core::time::Frame;
-use crate::core::error::{AppError, MediaError, Result};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -81,7 +81,10 @@ pub struct ThumbnailCache {
 
 impl ThumbnailCache {
     pub fn new(max_entries: usize) -> Self {
-        Self { max_entries, entries: Mutex::new(Vec::new()) }
+        Self {
+            max_entries,
+            entries: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn get(&self, clip_id: ClipId, frame: Frame) -> Option<Thumbnail> {
@@ -102,7 +105,10 @@ impl ThumbnailCache {
     }
 
     pub fn clear(&self) {
-        self.entries.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.entries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     pub fn len(&self) -> usize {
@@ -129,7 +135,9 @@ mod tests {
 
     #[test]
     fn generation_reports_missing_backend() {
-        assert!(ThumbnailGenerator::default().generate(Path::new("a.mov"), Frame(0)).is_err());
+        assert!(ThumbnailGenerator::default()
+            .generate(Path::new("a.mov"), Frame(0))
+            .is_err());
     }
 
     #[test]
@@ -142,7 +150,10 @@ mod tests {
         cache.put(ClipId(2), Frame(0), thumb(0));
         cache.put(ClipId(3), Frame(0), thumb(0));
         assert_eq!(cache.len(), 2, "cache must not exceed max_entries");
-        assert!(cache.get(ClipId(1), Frame(0)).is_none(), "oldest entry evicted");
+        assert!(
+            cache.get(ClipId(1), Frame(0)).is_none(),
+            "oldest entry evicted"
+        );
     }
 
     #[test]

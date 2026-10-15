@@ -1,11 +1,11 @@
 //! Cut page - fast assembly editing
-use crate::core::math::{Rect, Point2};
+use crate::core::math::{Point2, Rect};
 
-use crate::ui::widgets::*;
+use crate::media::pool::MediaPool;
+use crate::timeline::clip::Timeline;
 use crate::ui::layout::*;
 use crate::ui::theme::Theme;
-use crate::timeline::clip::Timeline;
-use crate::media::pool::MediaPool;
+use crate::ui::widgets::*;
 
 pub struct CutPage {
     timeline: Option<Arc<RwLock<Timeline>>>,
@@ -70,26 +70,40 @@ impl CutPage {
     }
 }
 
-use std::sync::{Arc, RwLock};
-use crate::ui::viewer::{ViewerWidget, ViewerMode};
-use crate::ui::timeline_widget::TimelineWidget;
 use crate::ui::media_pool_widget::MediaPoolWidget;
+use crate::ui::timeline_widget::TimelineWidget;
+use crate::ui::viewer::{ViewerMode, ViewerWidget};
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
 struct Toolbar;
 
 impl Toolbar {
-    fn cut_toolbar() -> Self { Self }
+    fn cut_toolbar() -> Self {
+        Self
+    }
 }
 
 impl Widget for Toolbar {
-    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) { (f32::INFINITY, ctx.theme.header_height) }
+    fn measure(&self, ctx: &LayoutContext, _: Constraints) -> (f32, f32) {
+        (f32::INFINITY, ctx.theme.header_height)
+    }
     fn layout(&mut self, _ctx: &LayoutContext, _rect: Rect) {}
     fn draw(&self, ctx: &DrawContext, rect: Rect) {
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad { color: ctx.theme.bg_secondary, rect: [rect.x, rect.y, rect.w, rect.h] });
+        ctx.renderer
+            .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                color: ctx.theme.bg_secondary,
+                rect: [rect.x, rect.y, rect.w, rect.h],
+            });
         // Draw toolbar buttons
     }
-    fn handle_input(&mut self, _ctx: &InputContext, _event: InputEvent) -> bool { false }
-    fn as_any(&self) -> &dyn std::any::Any { self }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+    fn handle_input(&mut self, _ctx: &InputContext, _event: InputEvent) -> bool {
+        false
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }

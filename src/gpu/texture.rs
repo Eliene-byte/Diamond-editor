@@ -1,8 +1,11 @@
 //! GPU texture management
 
-use wgpu::{Device, Queue, Texture, TextureView, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, Extent3d, FilterMode, AddressMode, SamplerDescriptor};
-use std::sync::Arc;
 use crate::core::color::PixelFormat;
+use std::sync::Arc;
+use wgpu::{
+    AddressMode, Device, Extent3d, FilterMode, Queue, SamplerDescriptor, Texture,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
+};
 
 /// A GPU texture handle. Cloning is cheap: the underlying resource is shared
 /// through `Arc`, and wgpu keeps it alive until the last clone drops.
@@ -29,7 +32,11 @@ impl GpuTexture {
     ) -> Self {
         let desc = TextureDescriptor {
             label,
-            size: Extent3d { width, height, depth_or_array_layers: 1 },
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
@@ -37,10 +44,10 @@ impl GpuTexture {
             usage,
             view_formats: &[],
         };
-        
+
         let texture = Arc::new(device.create_texture(&desc));
         let view = Arc::new(texture.create_view(&Default::default()));
-        
+
         Self {
             texture,
             view,
@@ -65,8 +72,12 @@ impl GpuTexture {
         }))
     }
 
-    pub fn size(&self) -> (u32, u32) { (self.width, self.height) }
-    pub fn aspect_ratio(&self) -> f32 { self.width as f32 / self.height as f32 }
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+    pub fn aspect_ratio(&self) -> f32 {
+        self.width as f32 / self.height as f32
+    }
 }
 
 /// Texture manager
@@ -110,46 +121,61 @@ impl TextureManager {
 
     pub fn create_render_target(&mut self, width: u32, height: u32) -> GpuTexture {
         let key = format!("rt_{}x{}", width, height);
-        
+
         if let Some(tex) = self.textures.get(&key) {
             if tex.width == width && tex.height == height {
                 return tex.clone();
             }
         }
-        
+
         let texture = GpuTexture::new(
             &self.device,
             width,
             height,
             wgpu::TextureFormat::Rgba16Float,
-            TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
+            TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_SRC,
             Some(&key),
         );
-        
+
         self.textures.insert(key, texture.clone());
         texture
     }
 
-    pub fn create_storage_texture(&mut self, width: u32, height: u32, format: TextureFormat) -> GpuTexture {
+    pub fn create_storage_texture(
+        &mut self,
+        width: u32,
+        height: u32,
+        format: TextureFormat,
+    ) -> GpuTexture {
         let key = format!("storage_{}x{}_{:?}", width, height, format);
-        
+
         let texture = GpuTexture::new(
             &self.device,
             width,
             height,
             format,
-            TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
+            TextureUsages::STORAGE_BINDING
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_SRC,
             Some(&key),
         );
-        
+
         self.textures.insert(key, texture.clone());
         texture
     }
 
-    pub fn upload(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> GpuTexture {
+    pub fn upload(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        format: PixelFormat,
+    ) -> GpuTexture {
         let gpu_format = self.pixel_format_to_gpu(format);
         let key = format!("upload_{}x{}_{:?}", width, height, format);
-        
+
         let texture = GpuTexture::new(
             &self.device,
             width,
@@ -158,7 +184,7 @@ impl TextureManager {
             TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             Some(&key),
         );
-        
+
         // Upload data
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
@@ -173,35 +199,54 @@ impl TextureManager {
                 bytes_per_row: Some(self.bytes_per_row(width, gpu_format)),
                 rows_per_image: Some(height),
             },
-            Extent3d { width, height, depth_or_array_layers: 1 },
+            Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
-        
+
         self.textures.insert(key, texture.clone());
         texture
     }
 
-    pub fn create_from_pixels(&mut self, pixels: &[u8], width: u32, height: u32, format: PixelFormat) -> GpuTexture {
+    pub fn create_from_pixels(
+        &mut self,
+        pixels: &[u8],
+        width: u32,
+        height: u32,
+        format: PixelFormat,
+    ) -> GpuTexture {
         self.upload(pixels, width, height, format)
     }
 
     pub fn get_sampler(&mut self, key: SamplerKey) -> Arc<wgpu::Sampler> {
-        self.samplers.entry(key.clone()).or_insert_with(|| {
-            Arc::new(self.device.create_sampler(&SamplerDescriptor {
-                label: Some(&format!("Sampler {:?}", key)),
-                address_mode_u: key.address_u,
-                address_mode_v: key.address_v,
-                address_mode_w: key.address_w,
-                mag_filter: key.filter,
-                min_filter: key.filter,
-                mipmap_filter: key.filter,
-                compare: key.compare,
-                ..Default::default()
-            }))
-        }).clone()
+        self.samplers
+            .entry(key.clone())
+            .or_insert_with(|| {
+                Arc::new(self.device.create_sampler(&SamplerDescriptor {
+                    label: Some(&format!("Sampler {:?}", key)),
+                    address_mode_u: key.address_u,
+                    address_mode_v: key.address_v,
+                    address_mode_w: key.address_w,
+                    mag_filter: key.filter,
+                    min_filter: key.filter,
+                    mipmap_filter: key.filter,
+                    compare: key.compare,
+                    ..Default::default()
+                }))
+            })
+            .clone()
     }
 
-    pub fn get_or_create(&mut self, name: &str, creator: impl FnOnce() -> GpuTexture) -> &GpuTexture {
-        self.textures.entry(name.to_string()).or_insert_with(creator)
+    pub fn get_or_create(
+        &mut self,
+        name: &str,
+        creator: impl FnOnce() -> GpuTexture,
+    ) -> &GpuTexture {
+        self.textures
+            .entry(name.to_string())
+            .or_insert_with(creator)
     }
 
     pub fn remove(&mut self, name: &str) -> Option<GpuTexture> {
@@ -233,10 +278,20 @@ impl TextureManager {
     }
 
     /// 3D LUT texture (used by the color pipeline).
-    pub fn create_3d_texture(&mut self, width: u32, height: u32, depth: u32, data: Vec<u8>) -> GpuTexture {
+    pub fn create_3d_texture(
+        &mut self,
+        width: u32,
+        height: u32,
+        depth: u32,
+        data: Vec<u8>,
+    ) -> GpuTexture {
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("LUT 3D"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: depth },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: depth,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
@@ -245,17 +300,33 @@ impl TextureManager {
             view_formats: &[],
         });
         self.queue.write_texture(
-            wgpu::ImageCopyTexture { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             &data,
-            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) },
-            wgpu::Extent3d { width, height, depth_or_array_layers: depth },
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: depth,
+            },
         );
         let view = texture.create_view(&Default::default());
         GpuTexture {
             texture: Arc::new(texture),
             view: Arc::new(view),
             format: wgpu::TextureFormat::Rgba8Unorm,
-            width, height, depth, mip_levels: 1,
+            width,
+            height,
+            depth,
+            mip_levels: 1,
             usage: wgpu::TextureUsages::TEXTURE_BINDING,
         }
     }
@@ -264,7 +335,11 @@ impl TextureManager {
     pub fn create_1d_texture(&mut self, width: u32, data: Vec<u8>) -> GpuTexture {
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("LUT 1D"),
-            size: wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D1,
@@ -273,17 +348,33 @@ impl TextureManager {
             view_formats: &[],
         });
         self.queue.write_texture(
-            wgpu::ImageCopyTexture { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             &data,
-            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 6), rows_per_image: None },
-            wgpu::Extent3d { width, height: 1, depth_or_array_layers: 1 },
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 6),
+                rows_per_image: None,
+            },
+            wgpu::Extent3d {
+                width,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
         );
         let view = texture.create_view(&Default::default());
         GpuTexture {
             texture: Arc::new(texture),
             view: Arc::new(view),
             format: wgpu::TextureFormat::Rgba16Unorm,
-            width, height: 1, depth: 1, mip_levels: 1,
+            width,
+            height: 1,
+            depth: 1,
+            mip_levels: 1,
             usage: wgpu::TextureUsages::TEXTURE_BINDING,
         }
     }
@@ -327,7 +418,7 @@ impl TexturePool {
             usage,
             next_id: 0,
         };
-        
+
         for _ in 0..initial_count {
             pool.available.push_back(GpuTexture::new(
                 &pool.device,
@@ -339,7 +430,7 @@ impl TexturePool {
             ));
             pool.next_id += 1;
         }
-        
+
         pool
     }
 
@@ -368,12 +459,21 @@ impl TexturePool {
 
     pub fn release(&mut self, texture: GpuTexture) {
         // Find and remove from in_use
-        if let Some((id, _)) = self.in_use.iter().find(|(_, t)| t.texture.as_ref() == texture.texture.as_ref()).map(|(k, v)| (*k, v.clone())) {
+        if let Some((id, _)) = self
+            .in_use
+            .iter()
+            .find(|(_, t)| t.texture.as_ref() == texture.texture.as_ref())
+            .map(|(k, v)| (*k, v.clone()))
+        {
             self.in_use.remove(&id);
             self.available.push_back(texture);
         }
     }
 
-    pub fn available_count(&self) -> usize { self.available.len() }
-    pub fn in_use_count(&self) -> usize { self.in_use.len() }
+    pub fn available_count(&self) -> usize {
+        self.available.len()
+    }
+    pub fn in_use_count(&self) -> usize {
+        self.in_use.len()
+    }
 }

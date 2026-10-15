@@ -1,11 +1,11 @@
 //! Compute pipelines for GPU processing
 
-use wgpu::{Device, Queue, BindGroup, BindGroupLayout, PipelineLayout};
-use crate::gpu::texture::{TextureManager, GpuTexture};
-use crate::gpu::buffer::{UniformBuffer, StorageBuffer};
+use crate::gpu::buffer::{StorageBuffer, UniformBuffer};
 use crate::gpu::renderer::ComputeParams;
 use crate::gpu::renderer::ComputePipelineType;
+use crate::gpu::texture::{GpuTexture, TextureManager};
 use std::sync::Arc;
+use wgpu::{BindGroup, BindGroupLayout, Device, PipelineLayout, Queue};
 
 /// One fully-built compute pipeline plus the bind group layout it was built against.
 #[derive(Debug, Clone)]
@@ -26,7 +26,7 @@ impl ComputePipeline {
     pub fn new(device: Arc<Device>) -> Self {
         let mut pipelines = std::collections::HashMap::new();
         let mut bind_group_layouts = std::collections::HashMap::new();
-        
+
         for pipeline_type in [
             ComputePipelineType::Thumbnail,
             ComputePipelineType::Waveform,
@@ -37,7 +37,8 @@ impl ComputePipeline {
             ComputePipelineType::Stabilize,
             ComputePipelineType::Transcode,
         ] {
-            let (pipeline, layout, bind_group_layout) = Self::create_pipeline(&device, pipeline_type);
+            let (pipeline, layout, bind_group_layout) =
+                Self::create_pipeline(&device, pipeline_type);
             bind_group_layouts.insert(pipeline_type, Arc::new(bind_group_layout));
             pipelines.insert(
                 pipeline_type,
@@ -51,8 +52,12 @@ impl ComputePipeline {
                 },
             );
         }
-        
-        Self { device, pipelines, bind_group_layouts }
+
+        Self {
+            device,
+            pipelines,
+            bind_group_layouts,
+        }
     }
 
     fn create_pipeline(
@@ -63,15 +68,15 @@ impl ComputePipeline {
             label: Some(&format!("{:?} Compute Shader", pipeline_type)),
             source: wgpu::ShaderSource::Wgsl(Self::shader_source(pipeline_type).into()),
         });
-        
+
         let bind_group_layout = Self::bind_group_layout(device, pipeline_type);
-        
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{:?} Compute Layout", pipeline_type)),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-        
+
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(&format!("{:?} Compute Pipeline", pipeline_type)),
             layout: Some(&pipeline_layout),
@@ -80,29 +85,112 @@ impl ComputePipeline {
             compilation_options: Default::default(),
             cache: None,
         });
-        
+
         (pipeline, pipeline_layout, bind_group_layout)
     }
 
     fn bind_group_layout(device: &Device, pipeline_type: ComputePipelineType) -> BindGroupLayout {
         let entries = match pipeline_type {
             ComputePipelineType::Thumbnail | ComputePipelineType::Transcode => vec![
-                wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2 }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Texture { multisampled: false, view_dimension: wgpu::TextureViewDimension::D2, sample_type: wgpu::TextureSampleType::Float { filterable: true } }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
-            ComputePipelineType::Waveform | ComputePipelineType::Histogram | ComputePipelineType::Vectorscope => vec![
-                wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Texture { multisampled: false, view_dimension: wgpu::TextureViewDimension::D2, sample_type: wgpu::TextureSampleType::Float { filterable: true } }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
+            ComputePipelineType::Waveform
+            | ComputePipelineType::Histogram
+            | ComputePipelineType::Vectorscope => vec![
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
             _ => vec![
-                wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba32Float, view_dimension: wgpu::TextureViewDimension::D2 }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Texture { multisampled: false, view_dimension: wgpu::TextureViewDimension::D2, sample_type: wgpu::TextureSampleType::Float { filterable: true } }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba32Float,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         };
-        
+
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(&format!("{:?} Compute Bind Group Layout", pipeline_type)),
             entries: &entries,
@@ -129,7 +217,10 @@ impl ComputePipeline {
         pipeline_type: ComputePipelineType,
         params: ComputeParams,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let pipeline = self.pipelines.get(&pipeline_type).ok_or("Pipeline not found")?;
+        let pipeline = self
+            .pipelines
+            .get(&pipeline_type)
+            .ok_or("Pipeline not found")?;
 
         // Create bind group
         let bind_group_layout = self.bind_group_layouts.get(&pipeline_type).unwrap();
@@ -140,9 +231,20 @@ impl ComputePipeline {
         let uniform = UniformBuffer::new_uniform(device, &data, Some("Compute Params"));
 
         let entries = vec![
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&params.output.as_ref().unwrap_or(&params.input).view) },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&params.input.view) },
-            wgpu::BindGroupEntry { binding: 2, resource: uniform.as_entire_binding() },
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(
+                    &params.output.as_ref().unwrap_or(&params.input).view,
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&params.input.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: uniform.as_entire_binding(),
+            },
         ];
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -151,10 +253,15 @@ impl ComputePipeline {
             entries: &entries,
         });
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Compute Encoder") });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Compute Encoder"),
+        });
 
         {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some(&format!("{:?} Pass", pipeline_type)), timestamp_writes: None });
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some(&format!("{:?} Pass", pipeline_type)),
+                timestamp_writes: None,
+            });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
 
@@ -168,7 +275,6 @@ impl ComputePipeline {
         Ok(())
     }
 }
-
 
 const THUMBNAIL_SHADER: &str = r#"
 @group(0) @binding(0) var outputTexture: texture_storage_2d<rgba8unorm, write>;

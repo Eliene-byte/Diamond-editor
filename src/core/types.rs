@@ -1,18 +1,25 @@
 //! Fundamental types for video editing
 
-use std::fmt;
-use crate::core::time::{Frame, Timecode, Rational};
 use crate::core::color::{ColorSpace, PixelFormat};
 use crate::core::id::{BinId, ClipId, EffectId, MarkerId, TrackId, TrackItemId};
+use crate::core::time::{Frame, Rational, Timecode};
+use std::fmt;
 
 /// Unique identifier for any timeline object
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ObjectId(pub u64);
 
 impl ObjectId {
-    pub const fn new(id: u64) -> Self { Self(id) }
-    pub const fn nil() -> Self { Self(0) }
-    pub fn next(&mut self) -> Self { self.0 += 1; Self(self.0) }
+    pub const fn new(id: u64) -> Self {
+        Self(id)
+    }
+    pub const fn nil() -> Self {
+        Self(0)
+    }
+    pub fn next(&mut self) -> Self {
+        self.0 += 1;
+        Self(self.0)
+    }
 }
 
 impl fmt::Display for ObjectId {
@@ -147,8 +154,7 @@ impl FrameRate {
 }
 
 /// Project settings - immutable once created
-#[derive(Debug, Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProjectSettings {
     pub name: String,
     pub resolution: Resolution,
@@ -176,8 +182,7 @@ impl Default for ProjectSettings {
 }
 
 /// Timeline settings
-#[derive(Debug, Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TimelineSettings {
     pub name: String,
     pub resolution: Resolution,
@@ -291,38 +296,107 @@ pub struct Thumbnail {
 #[derive(Debug, Clone, PartialEq)]
 pub enum EditOperation {
     // Clip operations
-    AddClip { clip_id: ClipId, track: TrackId, position: Frame },
-    RemoveClip { item_id: TrackItemId },
-    MoveClip { item_id: TrackItemId, from: Frame, to: Frame, track: TrackId },
-    TrimClip { item_id: TrackItemId, edge: TrimEdge, old: Frame, new: Frame },
-    SplitClip { item_id: TrackItemId, position: Frame },
-    JoinClips { item_id_a: TrackItemId, item_id_b: TrackItemId },
+    AddClip {
+        clip_id: ClipId,
+        track: TrackId,
+        position: Frame,
+    },
+    RemoveClip {
+        item_id: TrackItemId,
+    },
+    MoveClip {
+        item_id: TrackItemId,
+        from: Frame,
+        to: Frame,
+        track: TrackId,
+    },
+    TrimClip {
+        item_id: TrackItemId,
+        edge: TrimEdge,
+        old: Frame,
+        new: Frame,
+    },
+    SplitClip {
+        item_id: TrackItemId,
+        position: Frame,
+    },
+    JoinClips {
+        item_id_a: TrackItemId,
+        item_id_b: TrackItemId,
+    },
 
     // Track operations
-    AddTrack { track_id: TrackId, track_type: TrackType, index: u32 },
-    RemoveTrack { track_id: TrackId },
-    ReorderTrack { track_id: TrackId, new_index: u32 },
-    ToggleTrackEnable { track_id: TrackId, enabled: bool },
-    ToggleTrackLock { track_id: TrackId, locked: bool },
-    ToggleTrackSolo { track_id: TrackId, solo: bool },
+    AddTrack {
+        track_id: TrackId,
+        track_type: TrackType,
+        index: u32,
+    },
+    RemoveTrack {
+        track_id: TrackId,
+    },
+    ReorderTrack {
+        track_id: TrackId,
+        new_index: u32,
+    },
+    ToggleTrackEnable {
+        track_id: TrackId,
+        enabled: bool,
+    },
+    ToggleTrackLock {
+        track_id: TrackId,
+        locked: bool,
+    },
+    ToggleTrackSolo {
+        track_id: TrackId,
+        solo: bool,
+    },
 
     // Effect operations
-    AddEffect { effect_id: EffectId, clip_id: ClipId, index: u32 },
-    RemoveEffect { effect_id: EffectId },
-    ReorderEffect { effect_id: EffectId, new_index: u32 },
-    UpdateEffectParams { effect_id: EffectId, params: EffectParams },
+    AddEffect {
+        effect_id: EffectId,
+        clip_id: ClipId,
+        index: u32,
+    },
+    RemoveEffect {
+        effect_id: EffectId,
+    },
+    ReorderEffect {
+        effect_id: EffectId,
+        new_index: u32,
+    },
+    UpdateEffectParams {
+        effect_id: EffectId,
+        params: EffectParams,
+    },
 
     // Marker operations
-    AddMarker { marker_id: MarkerId, position: Frame, data: MarkerData },
-    RemoveMarker { marker_id: MarkerId },
-    UpdateMarker { marker_id: MarkerId, data: MarkerData },
+    AddMarker {
+        marker_id: MarkerId,
+        position: Frame,
+        data: MarkerData,
+    },
+    RemoveMarker {
+        marker_id: MarkerId,
+    },
+    UpdateMarker {
+        marker_id: MarkerId,
+        data: MarkerData,
+    },
 
     // Project operations
-    UpdateProjectSettings { old: ProjectSettings, new: ProjectSettings },
-    UpdateTimelineSettings { old: TimelineSettings, new: TimelineSettings },
+    UpdateProjectSettings {
+        old: ProjectSettings,
+        new: ProjectSettings,
+    },
+    UpdateTimelineSettings {
+        old: TimelineSettings,
+        new: TimelineSettings,
+    },
 
     // Selection
-    SetSelection { objects: Vec<ObjectId> },
+    SetSelection {
+        objects: Vec<ObjectId>,
+    },
     ClearSelection,
 }
 
@@ -339,8 +413,7 @@ pub enum TrackType {
     Subtitle,
 }
 
-#[derive(Debug, Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EffectParams {
     pub effect_type: EffectType,
     pub parameters: std::collections::HashMap<String, EffectValue>,
@@ -424,8 +497,7 @@ pub enum Easing {
     Custom(f32, f32, f32, f32), // cubic-bezier
 }
 
-#[derive(Debug, Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MarkerData {
     pub name: String,
     pub note: String,

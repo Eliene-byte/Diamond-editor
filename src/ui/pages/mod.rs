@@ -1,15 +1,15 @@
 //! Application pages - Cut, Edit, Color, Fusion, Fairlight, Deliver
 
-pub mod cut;
-pub mod edit;
 pub mod color;
-pub mod fusion;
-pub mod fairlight;
+pub mod cut;
 pub mod deliver;
+pub mod edit;
+pub mod fairlight;
+pub mod fusion;
 
-pub use cut::*;
-pub use edit::*;
 pub use color::*;
-pub use fusion::*;
-pub use fairlight::*;
+pub use cut::*;
 pub use deliver::*;
+pub use edit::*;
+pub use fairlight::*;
+pub use fusion::*;

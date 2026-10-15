@@ -1,8 +1,8 @@
 //! Render pipeline management
 
-use wgpu::{Device, RenderPipeline, PipelineLayout, BindGroupLayout, ShaderModule, ShaderStages};
 use std::collections::HashMap;
 use std::sync::Arc;
+use wgpu::{BindGroupLayout, Device, PipelineLayout, RenderPipeline, ShaderModule, ShaderStages};
 
 /// Pipeline manager - caches and creates pipelines
 pub struct PipelineManager {
@@ -88,63 +88,71 @@ impl PipelineManager {
         }
     }
 
-    pub fn get_or_create(&mut self, key: PipelineKey, format: wgpu::TextureFormat) -> Arc<RenderPipeline> {
+    pub fn get_or_create(
+        &mut self,
+        key: PipelineKey,
+        format: wgpu::TextureFormat,
+    ) -> Arc<RenderPipeline> {
         if let Some(pipeline) = self.pipelines.get(&key) {
             return pipeline.clone();
         }
-        
+
         let pipeline = Arc::new(self.create_pipeline(key.clone(), format));
         self.pipelines.insert(key, pipeline.clone());
         pipeline
     }
 
     fn create_pipeline(&mut self, key: PipelineKey, format: wgpu::TextureFormat) -> RenderPipeline {
-        let bind_group_layout = self.get_or_create_bind_group_layout(key.layout_key().bind_group_key());
+        let bind_group_layout =
+            self.get_or_create_bind_group_layout(key.layout_key().bind_group_key());
         let shader = self.get_or_create_shader(key.shader_key());
 
         let bgl: &BindGroupLayout = &bind_group_layout;
         // Bind the range slice to a local: the descriptor borrows it.
         let push_constants = key.push_constant_ranges();
-        let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some(&format!("{:?} Layout", key)),
-            // `Arc<BindGroupLayout>` does not coerce to `&[&BindGroupLayout]`: deref
-            // coercion does not apply to array element types, so build the slice
-            // explicitly rather than writing `&[layout.as_ref()]`.
-            bind_group_layouts: std::slice::from_ref(&bgl),
-            push_constant_ranges: &push_constants,
-        });
-        
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(&format!("{:?} Layout", key)),
+                // `Arc<BindGroupLayout>` does not coerce to `&[&BindGroupLayout]`: deref
+                // coercion does not apply to array element types, so build the slice
+                // explicitly rather than writing `&[layout.as_ref()]`.
+                bind_group_layouts: std::slice::from_ref(&bgl),
+                push_constant_ranges: &push_constants,
+            });
+
         let (vertex_entry, vertex_buffers) = key.vertex_state();
         let (fragment_entry, targets) = key.fragment_state(format);
-        
-        self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&format!("{:?} Pipeline", key)),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: shader.as_ref(),
-                entry_point: Some(vertex_entry),
-                buffers: vertex_buffers,
-                compilation_options: Default::default(),
-            },
-            primitive: key.primitive_state(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: shader.as_ref(),
-                entry_point: Some(fragment_entry),
-                targets: &targets,
-                compilation_options: Default::default(),
-            }),
-            multiview: None,
-            cache: None,
-        })
+
+        self.device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(&format!("{:?} Pipeline", key)),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: shader.as_ref(),
+                    entry_point: Some(vertex_entry),
+                    buffers: vertex_buffers,
+                    compilation_options: Default::default(),
+                },
+                primitive: key.primitive_state(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: shader.as_ref(),
+                    entry_point: Some(fragment_entry),
+                    targets: &targets,
+                    compilation_options: Default::default(),
+                }),
+                multiview: None,
+                cache: None,
+            })
     }
 
     fn get_or_create_layout(&mut self, key: LayoutKey) -> Arc<PipelineLayout> {
         if let Some(layout) = self.layouts.get(&key) {
             return layout.clone();
         }
-        
+
         let layout = Arc::new(self.create_layout(key.clone()));
         self.layouts.insert(key, layout.clone());
         layout
@@ -156,18 +164,19 @@ impl PipelineManager {
         let bgl: &BindGroupLayout = &bind_group_layout;
         let push_constants = key.push_constant_ranges();
 
-        self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some(&format!("{:?} Layout", key)),
-            bind_group_layouts: std::slice::from_ref(&bgl),
-            push_constant_ranges: &push_constants,
-        })
+        self.device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(&format!("{:?} Layout", key)),
+                bind_group_layouts: std::slice::from_ref(&bgl),
+                push_constant_ranges: &push_constants,
+            })
     }
 
     fn get_or_create_bind_group_layout(&mut self, key: BindGroupKey) -> Arc<BindGroupLayout> {
         if let Some(layout) = self.bind_group_layouts.get(&key) {
             return layout.clone();
         }
-        
+
         let layout = Arc::new(self.create_bind_group_layout(key.clone()));
         self.bind_group_layouts.insert(key, layout.clone());
         layout
@@ -175,18 +184,19 @@ impl PipelineManager {
 
     fn create_bind_group_layout(&self, key: BindGroupKey) -> BindGroupLayout {
         let entries = key.entries();
-        
-        self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some(&format!("{:?} Bind Group Layout", key)),
-            entries: &entries,
-        })
+
+        self.device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some(&format!("{:?} Bind Group Layout", key)),
+                entries: &entries,
+            })
     }
 
     fn get_or_create_shader(&mut self, key: ShaderKey) -> Arc<ShaderModule> {
         if let Some(shader) = self.shaders.get(&key) {
             return shader.clone();
         }
-        
+
         let shader = Arc::new(self.create_shader(key.clone()));
         self.shaders.insert(key, shader.clone());
         shader
@@ -194,10 +204,11 @@ impl PipelineManager {
 
     fn create_shader(&self, key: ShaderKey) -> ShaderModule {
         let source = key.source();
-        self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(&format!("{:?} Shader", key)),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        })
+        self.device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&format!("{:?} Shader", key)),
+                source: wgpu::ShaderSource::Wgsl(source.into()),
+            })
     }
 }
 
@@ -209,7 +220,9 @@ impl PipelineKey {
             PipelineKey::Transition(_) => LayoutKey::Transition,
             PipelineKey::Composite => LayoutKey::Composite,
             PipelineKey::Text => LayoutKey::Text,
-            PipelineKey::Waveform | PipelineKey::Vectorscope | PipelineKey::Histogram => LayoutKey::Scopes,
+            PipelineKey::Waveform | PipelineKey::Vectorscope | PipelineKey::Histogram => {
+                LayoutKey::Scopes
+            }
             PipelineKey::Custom(_) => LayoutKey::TextureQuad,
         }
     }
@@ -245,7 +258,10 @@ impl PipelineKey {
         }
     }
 
-    fn fragment_state(&self, format: wgpu::TextureFormat) -> (&'static str, Vec<Option<wgpu::ColorTargetState>>) {
+    fn fragment_state(
+        &self,
+        format: wgpu::TextureFormat,
+    ) -> (&'static str, Vec<Option<wgpu::ColorTargetState>>) {
         let target = Some(wgpu::ColorTargetState {
             format,
             blend: Some(match self {
@@ -443,23 +459,51 @@ impl ShaderKey {
             ShaderKey::TextureQuad => include_str!("../assets/shaders/quad.wgsl"),
             ShaderKey::ColorGrade => include_str!("../assets/shaders/color_grade.wgsl"),
             ShaderKey::Transition(t) => match t {
-                TransitionPipelineType::CrossDissolve => include_str!("../assets/shaders/transitions/cross_dissolve.wgsl"),
-                TransitionPipelineType::Wipe => include_str!("../assets/shaders/transitions/wipe.wgsl"),
-                TransitionPipelineType::Slide => include_str!("../assets/shaders/transitions/slide.wgsl"),
-                TransitionPipelineType::Push => include_str!("../assets/shaders/transitions/push.wgsl"),
-                TransitionPipelineType::DipToColor => include_str!("../assets/shaders/transitions/dip_to_color.wgsl"),
-                TransitionPipelineType::MorphCut => include_str!("../assets/shaders/transitions/morph_cut.wgsl"),
+                TransitionPipelineType::CrossDissolve => {
+                    include_str!("../assets/shaders/transitions/cross_dissolve.wgsl")
+                }
+                TransitionPipelineType::Wipe => {
+                    include_str!("../assets/shaders/transitions/wipe.wgsl")
+                }
+                TransitionPipelineType::Slide => {
+                    include_str!("../assets/shaders/transitions/slide.wgsl")
+                }
+                TransitionPipelineType::Push => {
+                    include_str!("../assets/shaders/transitions/push.wgsl")
+                }
+                TransitionPipelineType::DipToColor => {
+                    include_str!("../assets/shaders/transitions/dip_to_color.wgsl")
+                }
+                TransitionPipelineType::MorphCut => {
+                    include_str!("../assets/shaders/transitions/morph_cut.wgsl")
+                }
             },
             ShaderKey::Scopes => include_str!("../assets/shaders/scopes.wgsl"),
             ShaderKey::Compute(c) => match c {
-                ComputeShaderType::Thumbnail => include_str!("../assets/shaders/compute/thumbnail.wgsl"),
-                ComputeShaderType::Waveform => include_str!("../assets/shaders/compute/waveform.wgsl"),
-                ComputeShaderType::Histogram => include_str!("../assets/shaders/compute/histogram.wgsl"),
-                ComputeShaderType::Vectorscope => include_str!("../assets/shaders/compute/vectorscope.wgsl"),
-                ComputeShaderType::OpticalFlow => include_str!("../assets/shaders/compute/optical_flow.wgsl"),
-                ComputeShaderType::NoiseReduction => include_str!("../assets/shaders/compute/noise_reduction.wgsl"),
-                ComputeShaderType::Stabilize => include_str!("../assets/shaders/compute/stabilize.wgsl"),
-                ComputeShaderType::Transcode => include_str!("../assets/shaders/compute/transcode.wgsl"),
+                ComputeShaderType::Thumbnail => {
+                    include_str!("../assets/shaders/compute/thumbnail.wgsl")
+                }
+                ComputeShaderType::Waveform => {
+                    include_str!("../assets/shaders/compute/waveform.wgsl")
+                }
+                ComputeShaderType::Histogram => {
+                    include_str!("../assets/shaders/compute/histogram.wgsl")
+                }
+                ComputeShaderType::Vectorscope => {
+                    include_str!("../assets/shaders/compute/vectorscope.wgsl")
+                }
+                ComputeShaderType::OpticalFlow => {
+                    include_str!("../assets/shaders/compute/optical_flow.wgsl")
+                }
+                ComputeShaderType::NoiseReduction => {
+                    include_str!("../assets/shaders/compute/noise_reduction.wgsl")
+                }
+                ComputeShaderType::Stabilize => {
+                    include_str!("../assets/shaders/compute/stabilize.wgsl")
+                }
+                ComputeShaderType::Transcode => {
+                    include_str!("../assets/shaders/compute/transcode.wgsl")
+                }
             },
         }
     }

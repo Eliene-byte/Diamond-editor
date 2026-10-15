@@ -1,12 +1,15 @@
 //! Media metadata extraction and management
 
-use crate::core::types::{MediaType, Resolution, FrameRate, PixelFormat, ColorSpace, ClipMetadata, ClipTags, ClipFlags, ColorLabel, Thumbnail};
+use crate::core::error::{MediaError, Result};
 use crate::core::id::{ClipId, MediaId};
 use crate::core::time::Frame;
-use crate::core::error::{Result, MediaError};
-use std::path::Path;
-use std::collections::HashMap;
+use crate::core::types::{
+    ClipFlags, ClipMetadata, ClipTags, ColorLabel, ColorSpace, FrameRate, MediaType, PixelFormat,
+    Resolution, Thumbnail,
+};
 use ffmpeg_next as ffmpeg;
+use std::collections::HashMap;
+use std::path::Path;
 
 /// Comprehensive media metadata
 #[derive(Debug, Clone)]
@@ -33,10 +36,10 @@ pub struct MediaMetadata {
 impl MediaMetadata {
     pub fn from_file(path: &Path) -> Result<Self> {
         ffmpeg::init()?;
-        
-        let mut ictx = ffmpeg::format::input(&path)
-            .map_err(|e| MediaError::Decoder(e.to_string()))?;
-        
+
+        let mut ictx =
+            ffmpeg::format::input(&path).map_err(|e| MediaError::Decoder(e.to_string()))?;
+
         let metadata = Self::from_format_context(&mut ictx, path)?;
         Ok(metadata)
     }
@@ -45,37 +48,42 @@ impl MediaMetadata {
         let file_meta = std::fs::metadata(path)?;
         let file_size = file_meta.len();
         let file_name = path.file_name().unwrap().to_string_lossy().to_string();
-        
+
         let format_name = ictx.format().name().to_string();
         let format_long_name = ictx.format().long_name().to_string();
-        
+
         let duration = ictx.duration().unwrap_or(0);
         let bit_rate = ictx.bit_rate() as u64;
-        
-        let creation_time = file_meta.created().ok()
+
+        let creation_time = file_meta
+            .created()
+            .ok()
             .and_then(|t| chrono::DateTime::<chrono::Utc>::from(t).into());
-        let modification_time = file_meta.modified().ok()
+        let modification_time = file_meta
+            .modified()
+            .ok()
             .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
             .unwrap_or_else(chrono::Utc::now);
-        
+
         // Extract tags
         let mut tags = HashMap::new();
         for (k, v) in ictx.metadata().iter() {
             tags.insert(k.to_string(), v.to_string());
         }
-        
+
         // Process streams
         let mut video_streams = Vec::new();
         let mut audio_streams = Vec::new();
         let mut subtitle_streams = Vec::new();
-        
+
         for stream in ictx.streams() {
             let codec = stream.codec();
-            let stream_tags: HashMap<String, String> = stream.metadata()
+            let stream_tags: HashMap<String, String> = stream
+                .metadata()
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect();
-            
+
             match codec.medium() {
                 ffmpeg::media::Type::Video => {
                     video_streams.push(VideoStreamMetadata::from_stream(stream)?);
@@ -89,13 +97,14 @@ impl MediaMetadata {
                 _ => {}
             }
         }
-        
+
         // Chapters
-        let chapters = ictx.chapters()
+        let chapters = ictx
+            .chapters()
             .iter()
             .map(ChapterMetadata::from_chapter)
             .collect();
-        
+
         // Determine primary media type
         let media_type = if !video_streams.is_empty() {
             MediaType::Video
@@ -104,7 +113,7 @@ impl MediaMetadata {
         } else {
             MediaType::Image
         };
-        
+
         Ok(Self {
             id: MediaId::generate(),
             clip_id: ClipId::nil(),
@@ -137,7 +146,7 @@ impl MediaMetadata {
     pub fn to_clip_metadata(&self, clip_id: ClipId) -> ClipMetadata {
         let video = self.primary_video_stream();
         let audio = self.primary_audio_stream();
-        
+
         ClipMetadata {
             id: clip_id,
             file_path: self.file_path.to_string_lossy().to_string(),
@@ -149,7 +158,9 @@ impl MediaMetadata {
             color_space: video.and_then(|v| v.color_space),
             audio_channels: audio.map(|a| a.channels as u16),
             audio_sample_rate: audio.map(|a| a.sample_rate),
-            codec_name: video.map(|v| v.codec_name.clone()).or_else(|| audio.map(|a| a.codec_name.clone())),
+            codec_name: video
+                .map(|v| v.codec_name.clone())
+                .or_else(|| audio.map(|a| a.codec_name.clone())),
             bit_rate: Some(self.bit_rate),
             tags: ClipTags {
                 name: self.file_name.clone(),
@@ -193,7 +204,7 @@ impl VideoStreamMetadata {
         let codec = stream.codec();
         let width = codec.width();
         let height = codec.height();
-        
+
         let resolution = match (width, height) {
             (720, 486) => Some(Resolution::Ntsc),
             (720, 576) => Some(Resolution::Pal),
@@ -208,22 +219,27 @@ impl VideoStreamMetadata {
             (8192, 4320) => Some(Resolution::Dci8k),
             _ => Some(Resolution::Custom(width, height)),
         };
-        
+
         let frame_rate = stream.avg_frame_rate();
         let frame_rate = if frame_rate.0 > 0 && frame_rate.1 > 0 {
-            Some(FrameRate::Custom(crate::core::time::Rational::new(frame_rate.0 as i64, frame_rate.1 as i64)))
-        } else { None };
-        
+            Some(FrameRate::Custom(crate::core::time::Rational::new(
+                frame_rate.0 as i64,
+                frame_rate.1 as i64,
+            )))
+        } else {
+            None
+        };
+
         let time_base = stream.time_base();
         let duration = stream.duration().map(|d| Frame(d));
-        
+
         let pixel_format = pixel_format_from_ffmpeg(codec.format());
         let color_space = color_space_from_ffmpeg(codec.color_space(), codec.color_range());
-        
+
         let codec_name = codec.name().to_string();
         let is_pro_res = codec_name.contains("prores");
         let is_dnxhd = codec_name.contains("dnxhd") || codec_name.contains("dnxhr");
-        
+
         Ok(Self {
             index: stream.index(),
             codec_name: codec_name.clone(),
@@ -248,7 +264,11 @@ impl VideoStreamMetadata {
             is_hevc: codec_name == "hevc",
             is_pro_res,
             is_dnxhd,
-            tags: stream.metadata().iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            tags: stream
+                .metadata()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         })
     }
 }
@@ -284,7 +304,11 @@ impl AudioStreamMetadata {
             time_base: Rational::new(stream.time_base().0 as i64, stream.time_base().1 as i64),
             duration: stream.duration().map(|d| Frame(d)),
             language: stream.language().unwrap_or_default().to_string(),
-            tags: stream.metadata().iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            tags: stream
+                .metadata()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         })
     }
 }
@@ -305,8 +329,14 @@ impl SubtitleStreamMetadata {
             index: stream.index(),
             codec_name: codec.name().to_string(),
             language: stream.language().unwrap_or_default().to_string(),
-            is_hearing_impaired: stream.disposition().contains(ffmpeg::format::stream::Disposition::HEARING_IMPAIRED),
-            tags: stream.metadata().iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            is_hearing_impaired: stream
+                .disposition()
+                .contains(ffmpeg::format::stream::Disposition::HEARING_IMPAIRED),
+            tags: stream
+                .metadata()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         })
     }
 }
@@ -327,7 +357,11 @@ impl ChapterMetadata {
             start: Frame(chapter.start()),
             end: Frame(chapter.end()),
             title: chapter.metadata().get("title").unwrap_or(&"").to_string(),
-            tags: chapter.metadata().iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            tags: chapter
+                .metadata()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         }
     }
 }
@@ -339,7 +373,9 @@ pub struct Rational {
 }
 
 impl Rational {
-    pub const fn new(num: i64, den: i64) -> Self { Self { num, den } }
+    pub const fn new(num: i64, den: i64) -> Self {
+        Self { num, den }
+    }
 }
 
 fn pixel_format_from_ffmpeg(fmt: ffmpeg::format::Pixel) -> PixelFormat {
@@ -359,7 +395,10 @@ fn pixel_format_from_ffmpeg(fmt: ffmpeg::format::Pixel) -> PixelFormat {
     }
 }
 
-fn color_space_from_ffmpeg(cs: ffmpeg::format::ColorSpace, range: ffmpeg::format::ColorRange) -> ColorSpace {
+fn color_space_from_ffmpeg(
+    cs: ffmpeg::format::ColorSpace,
+    range: ffmpeg::format::ColorRange,
+) -> ColorSpace {
     match (cs, range) {
         (ffmpeg::format::ColorSpace::BT709, ffmpeg::format::ColorRange::MPEG) => ColorSpace::Rec709,
         (ffmpeg::format::ColorSpace::BT2020, _) => ColorSpace::Rec2020,

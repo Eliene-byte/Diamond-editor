@@ -6,15 +6,17 @@
 //! error. That lets the rest of the application (timeline, UI, GPU) compile and
 //! be tested on machines with no codec toolchain installed.
 
-use crate::core::color::PixelFormat;
-use crate::core::types::FrameRate;
-use crate::core::time::{Frame, Rational};
-use crate::core::id::ClipId;
-use crate::core::error::{Result, MediaError};
 use crate::core::color::ColorSpace;
+use crate::core::color::PixelFormat;
+use crate::core::error::{MediaError, Result};
+use crate::core::id::ClipId;
+use crate::core::time::{Frame, Rational};
+use crate::core::types::FrameRate;
 use std::path::Path;
 
-pub use crate::media::frame::{AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData};
+pub use crate::media::frame::{
+    AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData,
+};
 
 fn no_backend() -> MediaError {
     MediaError::UnsupportedFormat(
@@ -60,13 +62,27 @@ impl VideoDecoder {
         Err(no_backend().into())
     }
 
-    pub fn width(&self) -> u32 { self.width }
-    pub fn height(&self) -> u32 { self.height }
-    pub fn format(&self) -> PixelFormat { self.format }
-    pub fn color_space(&self) -> ColorSpace { self.color_space }
-    pub fn frame_rate(&self) -> Rational { self.frame_rate }
-    pub fn duration(&self) -> Frame { self.duration }
-    pub fn clip_id(&self) -> ClipId { self.clip_id }
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+    pub fn format(&self) -> PixelFormat {
+        self.format
+    }
+    pub fn color_space(&self) -> ColorSpace {
+        self.color_space
+    }
+    pub fn frame_rate(&self) -> Rational {
+        self.frame_rate
+    }
+    pub fn duration(&self) -> Frame {
+        self.duration
+    }
+    pub fn clip_id(&self) -> ClipId {
+        self.clip_id
+    }
 }
 
 /// Audio decoder stub. See [`VideoDecoder`] for the rationale.
@@ -83,16 +99,26 @@ impl AudioDecoder {
 
     /// Build a silent in-memory decoder for tests.
     pub fn empty(sample_rate: u32, channels: u16) -> Self {
-        Self { sample_rate, channels, duration: Frame(0) }
+        Self {
+            sample_rate,
+            channels,
+            duration: Frame(0),
+        }
     }
 
     pub fn decode_all(&mut self) -> Result<Vec<AudioFrame>> {
         Err(no_backend().into())
     }
 
-    pub fn sample_rate(&self) -> u32 { self.sample_rate }
-    pub fn channels(&self) -> u16 { self.channels }
-    pub fn duration(&self) -> Frame { self.duration }
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+    pub fn channels(&self) -> u16 {
+        self.channels
+    }
+    pub fn duration(&self) -> Frame {
+        self.duration
+    }
 }
 
 /// Combined audio+video decoder stub.
@@ -108,13 +134,24 @@ impl MediaDecoder {
 
     /// Construct a decoder holding no streams, for tests.
     pub fn empty() -> Self {
-        Self { video: None, audio: None }
+        Self {
+            video: None,
+            audio: None,
+        }
     }
 
-    pub fn video(&mut self) -> Option<&mut VideoDecoder> { self.video.as_mut() }
-    pub fn audio(&mut self) -> Option<&mut AudioDecoder> { self.audio.as_mut() }
-    pub fn has_video(&self) -> bool { self.video.is_some() }
-    pub fn has_audio(&self) -> bool { self.audio.is_some() }
+    pub fn video(&mut self) -> Option<&mut VideoDecoder> {
+        self.video.as_mut()
+    }
+    pub fn audio(&mut self) -> Option<&mut AudioDecoder> {
+        self.audio.as_mut()
+    }
+    pub fn has_video(&self) -> bool {
+        self.video.is_some()
+    }
+    pub fn has_audio(&self) -> bool {
+        self.audio.is_some()
+    }
 }
 
 #[cfg(test)]

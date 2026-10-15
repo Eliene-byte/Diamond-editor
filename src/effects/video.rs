@@ -1,10 +1,10 @@
 //! Video effects - GPU accelerated
 
-use crate::gpu::renderer::{GpuRenderer, RenderCommand, ComputeParams, ComputePipelineType};
-use crate::gpu::texture::{TextureManager, GpuTexture};
-use crate::core::types::{EffectType, EffectParams, EffectValue, Interpolation, Easing, Keyframe};
-use crate::core::time::Frame;
 use crate::core::id::EffectId;
+use crate::core::time::Frame;
+use crate::core::types::{Easing, EffectParams, EffectType, EffectValue, Interpolation, Keyframe};
+use crate::gpu::renderer::{ComputeParams, ComputePipelineType, GpuRenderer, RenderCommand};
+use crate::gpu::texture::{GpuTexture, TextureManager};
 use std::collections::HashMap;
 
 /// Video effect instance
@@ -32,7 +32,7 @@ impl VideoEffect {
 
     fn default_params(effect_type: EffectType) -> EffectParams {
         let mut params = HashMap::new();
-        
+
         match effect_type {
             EffectType::Transform => {
                 params.insert("position".into(), EffectValue::Vec2(0.0, 0.0));
@@ -96,15 +96,22 @@ impl VideoEffect {
                 params.insert("lut".into(), EffectValue::String(String::new()));
                 params.insert("mix".into(), EffectValue::Float(1.0));
             }
-            EffectType::CrossDissolve | EffectType::DipToColor | EffectType::Push | EffectType::Slide | EffectType::Wipe => {
+            EffectType::CrossDissolve
+            | EffectType::DipToColor
+            | EffectType::Push
+            | EffectType::Slide
+            | EffectType::Wipe => {
                 params.insert("duration".into(), EffectValue::Float(1.0));
                 params.insert("ease".into(), EffectValue::Float(0.5));
                 params.insert("alignment".into(), EffectValue::Int(0)); // Center at cut
             }
             _ => {}
         }
-        
-        EffectParams { effect_type, parameters: params }
+
+        EffectParams {
+            effect_type,
+            parameters: params,
+        }
     }
 
     pub fn get_param(&self, name: &str) -> Option<&EffectValue> {
@@ -117,17 +124,21 @@ impl VideoEffect {
 
     pub fn get_keyframe_value(&self, param: &str, frame: Frame) -> Option<EffectValue> {
         self.keyframes.get(param).and_then(|kfs| {
-            kfs.iter().find(|kf| kf.frame == frame).map(|kf| kf.value.clone())
+            kfs.iter()
+                .find(|kf| kf.frame == frame)
+                .map(|kf| kf.value.clone())
         })
     }
 
     pub fn interpolated_value(&self, param: &str, frame: Frame) -> Option<EffectValue> {
         let kfs = self.keyframes.get(param)?;
-        if kfs.is_empty() { return None; }
-        
+        if kfs.is_empty() {
+            return None;
+        }
+
         let mut prev = None;
         let mut next = None;
-        
+
         for kf in kfs {
             if kf.frame <= frame {
                 prev = Some(kf);
@@ -136,7 +147,7 @@ impl VideoEffect {
                 break;
             }
         }
-        
+
         match (prev, next) {
             (Some(p), Some(n)) if p.frame != n.frame => {
                 let t = (frame.0 - p.frame.0) as f32 / (n.frame.0 - p.frame.0) as f32;
@@ -148,15 +159,43 @@ impl VideoEffect {
         }
     }
 
-    fn interpolate_values(a: &EffectValue, b: &EffectValue, t: f32, interp: Interpolation, easing: Easing) -> Option<EffectValue> {
+    fn interpolate_values(
+        a: &EffectValue,
+        b: &EffectValue,
+        t: f32,
+        interp: Interpolation,
+        easing: Easing,
+    ) -> Option<EffectValue> {
         let t = Self::apply_easing(t, easing);
         match (a, b) {
-            (EffectValue::Float(a), EffectValue::Float(b)) => Some(EffectValue::Float(Self::lerp(*a, *b, t))),
-            (EffectValue::Vec2(ax, ay), EffectValue::Vec2(bx, by)) => Some(EffectValue::Vec2(Self::lerp(*ax, *bx, t), Self::lerp(*ay, *by, t))),
-            (EffectValue::Vec3(ax, ay, az), EffectValue::Vec3(bx, by, bz)) => Some(EffectValue::Vec3(Self::lerp(*ax, *bx, t), Self::lerp(*ay, *by, t), Self::lerp(*az, *bz, t))),
-            (EffectValue::Color(ar, ag, ab, aa), EffectValue::Color(br, bg, bb, ba)) => Some(EffectValue::Color(Self::lerp(*ar, *br, t), Self::lerp(*ag, *bg, t), Self::lerp(*ab, *bb, t), Self::lerp(*aa, *ba, t))),
-            (EffectValue::Int(a), EffectValue::Int(b)) => Some(EffectValue::Int((*a as f32 + (*b - *a) as f32 * t) as i64)),
-            (EffectValue::Bool(a), EffectValue::Bool(b)) => Some(EffectValue::Bool(if t < 0.5 { *a } else { *b })),
+            (EffectValue::Float(a), EffectValue::Float(b)) => {
+                Some(EffectValue::Float(Self::lerp(*a, *b, t)))
+            }
+            (EffectValue::Vec2(ax, ay), EffectValue::Vec2(bx, by)) => Some(EffectValue::Vec2(
+                Self::lerp(*ax, *bx, t),
+                Self::lerp(*ay, *by, t),
+            )),
+            (EffectValue::Vec3(ax, ay, az), EffectValue::Vec3(bx, by, bz)) => {
+                Some(EffectValue::Vec3(
+                    Self::lerp(*ax, *bx, t),
+                    Self::lerp(*ay, *by, t),
+                    Self::lerp(*az, *bz, t),
+                ))
+            }
+            (EffectValue::Color(ar, ag, ab, aa), EffectValue::Color(br, bg, bb, ba)) => {
+                Some(EffectValue::Color(
+                    Self::lerp(*ar, *br, t),
+                    Self::lerp(*ag, *bg, t),
+                    Self::lerp(*ab, *bb, t),
+                    Self::lerp(*aa, *ba, t),
+                ))
+            }
+            (EffectValue::Int(a), EffectValue::Int(b)) => {
+                Some(EffectValue::Int((*a as f32 + (*b - *a) as f32 * t) as i64))
+            }
+            (EffectValue::Bool(a), EffectValue::Bool(b)) => {
+                Some(EffectValue::Bool(if t < 0.5 { *a } else { *b }))
+            }
             _ => None,
         }
     }
@@ -166,7 +205,13 @@ impl VideoEffect {
             Easing::None => t,
             Easing::EaseIn => t * t * t,
             Easing::EaseOut => 1.0 - (1.0 - t).powi(3),
-            Easing::EaseInOut => if t < 0.5 { 4.0 * t * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0 },
+            Easing::EaseInOut => {
+                if t < 0.5 {
+                    4.0 * t * t * t
+                } else {
+                    1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+                }
+            }
             Easing::Custom(x1, y1, x2, y2) => Self::cubic_bezier(t, x1, y1, x2, y2),
         }
     }
@@ -176,7 +221,9 @@ impl VideoEffect {
         u * u * u * 0.0 + 3.0 * u * u * t * y1 + 3.0 * u * t * t * y2 + t * t * t * 1.0
     }
 
-    fn lerp(a: f32, b: f32, t: f32) -> f32 { a + (b - a) * t }
+    fn lerp(a: f32, b: f32, t: f32) -> f32 {
+        a + (b - a) * t
+    }
 }
 
 /// Video effect renderer
@@ -192,7 +239,11 @@ struct EffectPipeline {
 
 impl VideoEffectRenderer {
     pub fn new(renderer: GpuRenderer, texture_manager: TextureManager) -> Self {
-        Self { renderer, texture_manager, pipelines: HashMap::new() }
+        Self {
+            renderer,
+            texture_manager,
+            pipelines: HashMap::new(),
+        }
     }
 
     /// Allocate a scratch texture for an intermediate effect pass.
@@ -200,67 +251,123 @@ impl VideoEffectRenderer {
         self.texture_manager.create_render_target(width, height)
     }
 
-    pub fn apply(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn apply(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if !effect.enabled || effect.mix <= 0.0 {
             return Ok(());
         }
-        
+
         match effect.effect_type {
             EffectType::Transform => self.apply_transform(input, effect, output)?,
             EffectType::Crop => self.apply_crop(input, effect, output)?,
             EffectType::Opacity => self.apply_opacity(input, effect, output)?,
             EffectType::LiftGammaGain => self.apply_lift_gamma_gain(input, effect, output)?,
-            EffectType::ContrastSaturation => self.apply_contrast_saturation(input, effect, output)?,
+            EffectType::ContrastSaturation => {
+                self.apply_contrast_saturation(input, effect, output)?
+            }
             EffectType::ColorWheels => self.apply_color_wheels(input, effect, output)?,
             EffectType::Lut3d => self.apply_lut3d(input, effect, output)?,
             EffectType::Stabilize => self.apply_stabilize(input, effect, output)?,
             EffectType::Speed => self.apply_speed(input, effect, output)?,
             _ => {}
         }
-        
+
         Ok(())
     }
 
-    fn apply_transform(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_transform(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Would use compute shader for transform
         Ok(())
     }
 
-    fn apply_crop(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_crop(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    fn apply_opacity(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_opacity(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    fn apply_lift_gamma_gain(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_lift_gamma_gain(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Use color pipeline
         Ok(())
     }
 
-    fn apply_contrast_saturation(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_contrast_saturation(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    fn apply_color_wheels(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_color_wheels(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    fn apply_lut3d(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_lut3d(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    fn apply_stabilize(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_stabilize(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Use compute pipeline
-        self.renderer.submit(RenderCommand::Compute { 
-            pipeline: ComputePipelineType::Stabilize, 
-            params: ComputeParams { input: (*input).clone(), output: Some((*output).clone()), params: [0.0; 16] } 
+        self.renderer.submit(RenderCommand::Compute {
+            pipeline: ComputePipelineType::Stabilize,
+            params: ComputeParams {
+                input: (*input).clone(),
+                output: Some((*output).clone()),
+                params: [0.0; 16],
+            },
         });
         Ok(())
     }
 
-    fn apply_speed(&mut self, input: &GpuTexture, effect: &VideoEffect, output: &GpuTexture) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_speed(
+        &mut self,
+        input: &GpuTexture,
+        effect: &VideoEffect,
+        output: &GpuTexture,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
@@ -273,7 +380,10 @@ pub struct EffectStack {
 
 impl EffectStack {
     pub fn new() -> Self {
-        Self { effects: Vec::new(), cache: None }
+        Self {
+            effects: Vec::new(),
+            cache: None,
+        }
     }
 
     pub fn add(&mut self, effect: VideoEffect) {
@@ -285,7 +395,9 @@ impl EffectStack {
         if index < self.effects.len() {
             self.cache = None;
             Some(self.effects.remove(index))
-        } else { None }
+        } else {
+            None
+        }
     }
 
     pub fn reorder(&mut self, from: usize, to: usize) {
@@ -305,14 +417,29 @@ impl EffectStack {
         self.effects.get_mut(index)
     }
 
-    pub fn len(&self) -> usize { self.effects.len() }
-    pub fn is_empty(&self) -> bool { self.effects.is_empty() }
+    pub fn len(&self) -> usize {
+        self.effects.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.effects.is_empty()
+    }
 
-    pub fn iter(&self) -> impl Iterator<Item = &VideoEffect> { self.effects.iter() }
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut VideoEffect> { self.effects.iter_mut() }
+    pub fn iter(&self) -> impl Iterator<Item = &VideoEffect> {
+        self.effects.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut VideoEffect> {
+        self.effects.iter_mut()
+    }
 
-    pub fn render(&mut self, input: &GpuTexture, output: &GpuTexture, renderer: &mut VideoEffectRenderer) -> Result<(), Box<dyn std::error::Error>> {
-        if self.effects.is_empty() { return Ok(()); }
+    pub fn render(
+        &mut self,
+        input: &GpuTexture,
+        output: &GpuTexture,
+        renderer: &mut VideoEffectRenderer,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.effects.is_empty() {
+            return Ok(());
+        }
 
         let mut current_input = input.clone();
 

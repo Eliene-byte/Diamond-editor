@@ -5,9 +5,9 @@
 //! fails. The types mirror `metadata.rs` so dependent code still compiles, and
 //! [`MediaMetadata::from_file`] reports a clear error instead of panicking.
 
+use crate::core::error::{AppError, MediaError, Result};
 use crate::core::id::ClipId;
 use crate::core::time::Frame;
-use crate::core::error::{AppError, MediaError, Result};
 use std::path::Path;
 
 /// Exact-value rational time base, as containers report it.
@@ -177,7 +177,10 @@ mod tests {
 
     #[test]
     fn audio_channel_layout_is_named() {
-        let a = AudioStreamMetadata { channels: 6, ..Default::default() };
+        let a = AudioStreamMetadata {
+            channels: 6,
+            ..Default::default()
+        };
         assert_eq!(a.channel_layout(), "5.1");
     }
 }

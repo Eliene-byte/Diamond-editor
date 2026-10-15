@@ -1,11 +1,11 @@
 //! Playhead and playback control
 
-use crate::core::time::{Frame, FrameRate, Timecode, Duration};
+use crate::core::time::{Duration, Frame, FrameRate, Timecode};
 use crate::core::types::PlaybackState;
-use std::sync::atomic::{AtomicI64, AtomicBool, Ordering};
-use std::sync::Arc;
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use parking_lot::RwLock;
-use crossbeam::channel::{Sender, Receiver, unbounded};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::Arc;
 
 /// Playback event
 #[derive(Debug, Clone)]
@@ -121,7 +121,9 @@ impl Playhead {
     }
 
     pub fn step_forward(&self, frames: i64) {
-        let new_pos = (self.position() + Frame(frames)).0.clamp(0, self.duration().0);
+        let new_pos = (self.position() + Frame(frames))
+            .0
+            .clamp(0, self.duration().0);
         self.set_position(Frame(new_pos));
     }
 
@@ -167,8 +169,10 @@ impl Playhead {
     }
 
     fn start_frame_timer(&self) {
-        if self.frame_timer.lock().is_some() { return; }
-        
+        if self.frame_timer.lock().is_some() {
+            return;
+        }
+
         // Clone the shared handles; the data behind them is only ever read.
         let position = self.position.clone();
         let state = self.state.clone();
@@ -177,60 +181,70 @@ impl Playhead {
         let loop_range = *self.loop_range.read();
         let playback_speed = self.playback_speed.clone();
         let event_tx = self.event_tx.clone();
-        
+
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(16)); // ~60fps timer
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let current_state = *state.read();
-                if current_state != PlaybackState::Playing { break; }
-                
+                if current_state != PlaybackState::Playing {
+                    break;
+                }
+
                 let speed = *playback_speed.read();
-                if speed == 0.0 { continue; }
-                
+                if speed == 0.0 {
+                    continue;
+                }
+
                 let current = Frame(position.load(Ordering::Relaxed));
                 let frame_duration = 1.0 / frame_rate.fps_f32() / speed.abs();
-                let frames_to_advance = (speed * frame_rate.fps_f32() * frame_duration).round() as i64;
-                
+                let frames_to_advance =
+                    (speed * frame_rate.fps_f32() * frame_duration).round() as i64;
+
                 let new_pos = (current.0 + frames_to_advance).clamp(0, duration.0);
-                
+
                 // Check loop
                 if let Some((loop_start, loop_end)) = loop_range {
                     if new_pos >= loop_end.0 {
                         position.store(loop_start.0, Ordering::Relaxed);
-                        let _ = event_tx.send(PlaybackEvent::LoopPointReached { 
-                            loop_start, loop_end 
+                        let _ = event_tx.send(PlaybackEvent::LoopPointReached {
+                            loop_start,
+                            loop_end,
                         });
                         continue;
                     }
                     if new_pos < loop_start.0 && speed < 0.0 {
                         position.store(loop_end.0, Ordering::Relaxed);
-                        let _ = event_tx.send(PlaybackEvent::LoopPointReached { 
-                            loop_start, loop_end 
+                        let _ = event_tx.send(PlaybackEvent::LoopPointReached {
+                            loop_start,
+                            loop_end,
                         });
                         continue;
                     }
                 }
-                
+
                 if new_pos >= duration.0 {
                     position.store(duration.0, Ordering::Relaxed);
                     let _ = event_tx.send(PlaybackEvent::EndReached);
                     *state.write() = PlaybackState::Stopped;
-                    let _ = event_tx.send(PlaybackEvent::StateChanged { state: PlaybackState::Stopped });
+                    let _ = event_tx.send(PlaybackEvent::StateChanged {
+                        state: PlaybackState::Stopped,
+                    });
                     break;
                 }
-                
+
                 position.store(new_pos, Ordering::Relaxed);
-                
+
                 let tc = Timecode::from_frame(Frame(new_pos), frame_rate);
-                let _ = event_tx.send(PlaybackEvent::PositionChanged { 
-                    frame: Frame(new_pos), timecode: tc 
+                let _ = event_tx.send(PlaybackEvent::PositionChanged {
+                    frame: Frame(new_pos),
+                    timecode: tc,
                 });
             }
         });
-        
+
         *self.frame_timer.lock() = Some(handle);
     }
 
@@ -243,7 +257,10 @@ impl Playhead {
     fn emit_position(&self) {
         let frame = self.position();
         let tc = self.timecode();
-        let _ = self.event_tx.send(PlaybackEvent::PositionChanged { frame, timecode: tc });
+        let _ = self.event_tx.send(PlaybackEvent::PositionChanged {
+            frame,
+            timecode: tc,
+        });
     }
 
     fn emit_state(&self, state: PlaybackState) {

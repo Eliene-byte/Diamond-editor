@@ -41,12 +41,27 @@ impl ColorSpace {
         matches!(self, Self::Linear | Self::ACES2065_1 | Self::ACEScg)
     }
     pub const fn is_log(self) -> bool {
-        matches!(self, Self::LogC | Self::SLog2 | Self::SLog3 | Self::CLog | Self::CLog2
-            | Self::CLog3 | Self::VLog | Self::ArriLogC | Self::RedLog3G10
-            | Self::BmdFilm | Self::BmdFilmGen5 | Self::ACEScct)
+        matches!(
+            self,
+            Self::LogC
+                | Self::SLog2
+                | Self::SLog3
+                | Self::CLog
+                | Self::CLog2
+                | Self::CLog3
+                | Self::VLog
+                | Self::ArriLogC
+                | Self::RedLog3G10
+                | Self::BmdFilm
+                | Self::BmdFilmGen5
+                | Self::ACEScct
+        )
     }
     pub const fn is_hdr(self) -> bool {
-        matches!(self, Self::Rec2100_PQ | Self::Rec2100_HLG | Self::P3D65 | Self::P3DCI)
+        matches!(
+            self,
+            Self::Rec2100_PQ | Self::Rec2100_HLG | Self::P3D65 | Self::P3DCI
+        )
     }
     pub const fn primaries(self) -> Primaries {
         match self {
@@ -179,27 +194,58 @@ impl PixelFormat {
         match self {
             Self::Rgb8 | Self::Rgb10 | Self::Rgb12 | Self::Rgb16F | Self::Rgb32F => 3,
             Self::Rgba8 | Self::Rgba10 | Self::Rgba12 | Self::Rgba16F | Self::Rgba32F => 4,
-            Self::Yuv420_8 | Self::Yuv422_8 | Self::Yuv444_8
-            | Self::Yuv420_10 | Self::Yuv422_10 | Self::Yuv444_10
-            | Self::Yuv420_12 | Self::Yuv422_12 | Self::Yuv444_12 => 3,
+            Self::Yuv420_8
+            | Self::Yuv422_8
+            | Self::Yuv444_8
+            | Self::Yuv420_10
+            | Self::Yuv422_10
+            | Self::Yuv444_10
+            | Self::Yuv420_12
+            | Self::Yuv422_12
+            | Self::Yuv444_12 => 3,
             Self::P010 => 3,
             Self::Yuy2 | Self::UyvY | Self::V210 | Self::V410 => 3,
         }
     }
     pub const fn is_float(self) -> bool {
-        matches!(self, Self::Rgba16F | Self::Rgb16F | Self::Rgba32F | Self::Rgb32F)
+        matches!(
+            self,
+            Self::Rgba16F | Self::Rgb16F | Self::Rgba32F | Self::Rgb32F
+        )
     }
     pub const fn is_yuv(self) -> bool {
-        matches!(self, Self::Yuv420_8 | Self::Yuv422_8 | Self::Yuv444_8
-            | Self::Yuv420_10 | Self::Yuv422_10 | Self::Yuv444_10
-            | Self::Yuv420_12 | Self::Yuv422_12 | Self::Yuv444_12
-            | Self::P010 | Self::Yuy2 | Self::UyvY | Self::V210 | Self::V410)
+        matches!(
+            self,
+            Self::Yuv420_8
+                | Self::Yuv422_8
+                | Self::Yuv444_8
+                | Self::Yuv420_10
+                | Self::Yuv422_10
+                | Self::Yuv444_10
+                | Self::Yuv420_12
+                | Self::Yuv422_12
+                | Self::Yuv444_12
+                | Self::P010
+                | Self::Yuy2
+                | Self::UyvY
+                | Self::V210
+                | Self::V410
+        )
     }
     pub const fn is_planar(self) -> bool {
-        matches!(self, Self::Yuv420_8 | Self::Yuv422_8 | Self::Yuv444_8
-            | Self::Yuv420_10 | Self::Yuv422_10 | Self::Yuv444_10
-            | Self::Yuv420_12 | Self::Yuv422_12 | Self::Yuv444_12
-            | Self::P010)
+        matches!(
+            self,
+            Self::Yuv420_8
+                | Self::Yuv422_8
+                | Self::Yuv444_8
+                | Self::Yuv420_10
+                | Self::Yuv422_10
+                | Self::Yuv444_10
+                | Self::Yuv420_12
+                | Self::Yuv422_12
+                | Self::Yuv444_12
+                | Self::P010
+        )
     }
 }
 
@@ -226,18 +272,39 @@ impl ColorTransform {
             }
         }
         let o = [
-            self.matrix[0][0] * other.offset[0] + self.matrix[0][1] * other.offset[1] + self.matrix[0][2] * other.offset[2] + self.offset[0],
-            self.matrix[1][0] * other.offset[0] + self.matrix[1][1] * other.offset[1] + self.matrix[1][2] * other.offset[2] + self.offset[1],
-            self.matrix[2][0] * other.offset[0] + self.matrix[2][1] * other.offset[1] + self.matrix[2][2] * other.offset[2] + self.offset[2],
+            self.matrix[0][0] * other.offset[0]
+                + self.matrix[0][1] * other.offset[1]
+                + self.matrix[0][2] * other.offset[2]
+                + self.offset[0],
+            self.matrix[1][0] * other.offset[0]
+                + self.matrix[1][1] * other.offset[1]
+                + self.matrix[1][2] * other.offset[2]
+                + self.offset[1],
+            self.matrix[2][0] * other.offset[0]
+                + self.matrix[2][1] * other.offset[1]
+                + self.matrix[2][2] * other.offset[2]
+                + self.offset[2],
         ];
-        Self { matrix: m, offset: o }
+        Self {
+            matrix: m,
+            offset: o,
+        }
     }
 
     pub fn apply(self, rgb: [f32; 3]) -> [f32; 3] {
         [
-            self.matrix[0][0] * rgb[0] + self.matrix[0][1] * rgb[1] + self.matrix[0][2] * rgb[2] + self.offset[0],
-            self.matrix[1][0] * rgb[0] + self.matrix[1][1] * rgb[1] + self.matrix[1][2] * rgb[2] + self.offset[1],
-            self.matrix[2][0] * rgb[0] + self.matrix[2][1] * rgb[1] + self.matrix[2][2] * rgb[2] + self.offset[2],
+            self.matrix[0][0] * rgb[0]
+                + self.matrix[0][1] * rgb[1]
+                + self.matrix[0][2] * rgb[2]
+                + self.offset[0],
+            self.matrix[1][0] * rgb[0]
+                + self.matrix[1][1] * rgb[1]
+                + self.matrix[1][2] * rgb[2]
+                + self.offset[1],
+            self.matrix[2][0] * rgb[0]
+                + self.matrix[2][1] * rgb[1]
+                + self.matrix[2][2] * rgb[2]
+                + self.offset[2],
         ]
     }
 }
@@ -253,14 +320,21 @@ pub struct Lut1D {
 
 impl Lut1D {
     pub fn new(size: usize) -> Self {
-        Self { size, data: vec![[0.0; 3]; size], input_range: (0.0, 1.0), output_range: (0.0, 1.0) }
+        Self {
+            size,
+            data: vec![[0.0; 3]; size],
+            input_range: (0.0, 1.0),
+            output_range: (0.0, 1.0),
+        }
     }
     pub fn apply(&self, value: f32) -> [f32; 3] {
         let t = (value - self.input_range.0) / (self.input_range.1 - self.input_range.0);
         let idx = (t * (self.size - 1) as f32).clamp(0.0, (self.size - 1) as f32);
         let i = idx as usize;
         let f = idx - i as f32;
-        if i >= self.size - 1 { return self.data[self.size - 1]; }
+        if i >= self.size - 1 {
+            return self.data[self.size - 1];
+        }
         let a = self.data[i];
         let b = self.data[i + 1];
         [
@@ -282,8 +356,12 @@ pub struct Lut3D {
 
 impl Lut3D {
     pub fn new(size: usize) -> Self {
-        Self { size, data: vec![[0.0; 3]; size * size * size],
-            input_range: ([0.0; 3], [1.0; 3]), output_range: ([0.0; 3], [1.0; 3]) }
+        Self {
+            size,
+            data: vec![[0.0; 3]; size * size * size],
+            input_range: ([0.0; 3], [1.0; 3]),
+            output_range: ([0.0; 3], [1.0; 3]),
+        }
     }
     pub fn index(&self, r: usize, g: usize, b: usize) -> usize {
         (r * self.size + g) * self.size + b
@@ -291,13 +369,19 @@ impl Lut3D {
     pub fn apply(&self, rgb: [f32; 3]) -> [f32; 3] {
         // Trilinear interpolation
         let s = self.size as f32 - 1.0;
-        let r = (rgb[0] - self.input_range.0[0]) / (self.input_range.1[0] - self.input_range.0[0]) * s;
-        let g = (rgb[1] - self.input_range.0[1]) / (self.input_range.1[1] - self.input_range.0[1]) * s;
-        let b = (rgb[2] - self.input_range.0[2]) / (self.input_range.1[2] - self.input_range.0[2]) * s;
+        let r =
+            (rgb[0] - self.input_range.0[0]) / (self.input_range.1[0] - self.input_range.0[0]) * s;
+        let g =
+            (rgb[1] - self.input_range.0[1]) / (self.input_range.1[1] - self.input_range.0[1]) * s;
+        let b =
+            (rgb[2] - self.input_range.0[2]) / (self.input_range.1[2] - self.input_range.0[2]) * s;
 
-        let r0 = r.floor() as usize; let r1 = (r0 + 1).min(self.size - 1);
-        let g0 = g.floor() as usize; let g1 = (g0 + 1).min(self.size - 1);
-        let b0 = b.floor() as usize; let b1 = (b0 + 1).min(self.size - 1);
+        let r0 = r.floor() as usize;
+        let r1 = (r0 + 1).min(self.size - 1);
+        let g0 = g.floor() as usize;
+        let g1 = (g0 + 1).min(self.size - 1);
+        let b0 = b.floor() as usize;
+        let b1 = (b0 + 1).min(self.size - 1);
 
         let fr = r - r0 as f32;
         let fg = g - g0 as f32;
@@ -346,16 +430,27 @@ pub struct Cdl {
 
 impl Default for Cdl {
     fn default() -> Self {
-        Self { slope: [1.0, 1.0, 1.0], offset: [0.0, 0.0, 0.0], power: [1.0, 1.0, 1.0], sat: 1.0 }
+        Self {
+            slope: [1.0, 1.0, 1.0],
+            offset: [0.0, 0.0, 0.0],
+            power: [1.0, 1.0, 1.0],
+            sat: 1.0,
+        }
     }
 }
 
 impl Cdl {
     pub fn apply(self, rgb: [f32; 3]) -> [f32; 3] {
         let mut out = [
-            (rgb[0] * self.slope[0] + self.offset[0]).max(0.0).powf(self.power[0]),
-            (rgb[1] * self.slope[1] + self.offset[1]).max(0.0).powf(self.power[1]),
-            (rgb[2] * self.slope[2] + self.offset[2]).max(0.0).powf(self.power[2]),
+            (rgb[0] * self.slope[0] + self.offset[0])
+                .max(0.0)
+                .powf(self.power[0]),
+            (rgb[1] * self.slope[1] + self.offset[1])
+                .max(0.0)
+                .powf(self.power[1]),
+            (rgb[2] * self.slope[2] + self.offset[2])
+                .max(0.0)
+                .powf(self.power[2]),
         ];
         // Saturation
         let luma = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2];
@@ -381,40 +476,118 @@ pub struct GradeNode {
 #[derive(Debug, Clone)]
 pub enum GradeOp {
     // Primary
-    LiftGammaGain { lift: [f32; 3], gamma: [f32; 3], gain: [f32; 3] },
-    OffsetContrastPivot { offset: [f32; 3], contrast: f32, pivot: f32 },
-    TemperatureTint { temp: f32, tint: f32 },
+    LiftGammaGain {
+        lift: [f32; 3],
+        gamma: [f32; 3],
+        gain: [f32; 3],
+    },
+    OffsetContrastPivot {
+        offset: [f32; 3],
+        contrast: f32,
+        pivot: f32,
+    },
+    TemperatureTint {
+        temp: f32,
+        tint: f32,
+    },
     // Log wheels
-    LogWheels { shadows: [f32; 3], midtones: [f32; 3], highlights: [f32; 3], range: [f32; 2] },
+    LogWheels {
+        shadows: [f32; 3],
+        midtones: [f32; 3],
+        highlights: [f32; 3],
+        range: [f32; 2],
+    },
     // Curves
-    CustomCurves { channels: [Curve; 4] }, // RGB + Luma
-    HueVsHue { points: Vec<(f32, f32)> },
-    HueVsSat { points: Vec<(f32, f32)> },
-    HueVsLum { points: Vec<(f32, f32)> },
-    SatVsSat { points: Vec<(f32, f32)> },
-    LumVsSat { points: Vec<(f32, f32)> },
+    CustomCurves {
+        channels: [Curve; 4],
+    }, // RGB + Luma
+    HueVsHue {
+        points: Vec<(f32, f32)>,
+    },
+    HueVsSat {
+        points: Vec<(f32, f32)>,
+    },
+    HueVsLum {
+        points: Vec<(f32, f32)>,
+    },
+    SatVsSat {
+        points: Vec<(f32, f32)>,
+    },
+    LumVsSat {
+        points: Vec<(f32, f32)>,
+    },
     // Secondary
-    Qualifier { h_range: (f32, f32), s_range: (f32, f32), l_range: (f32, f32), softness: f32 },
-    Window { shape: WindowShape, transform: WindowTransform },
-    Tracker { data: Vec<TrackPoint> },
+    Qualifier {
+        h_range: (f32, f32),
+        s_range: (f32, f32),
+        l_range: (f32, f32),
+        softness: f32,
+    },
+    Window {
+        shape: WindowShape,
+        transform: WindowTransform,
+    },
+    Tracker {
+        data: Vec<TrackPoint>,
+    },
     // LUT
-    Lut3D { lut: Lut3D, mix: f32 },
-    Lut1D { lut: Lut1D, mix: f32 },
+    Lut3D {
+        lut: Lut3D,
+        mix: f32,
+    },
+    Lut1D {
+        lut: Lut1D,
+        mix: f32,
+    },
     // Creative
-    FilmGrain { strength: f32, size: f32 },
-    Halation { strength: f32, spread: f32 },
-    Bloom { threshold: f32, strength: f32, radius: f32 },
-    Vignette { amount: f32, midpoint: f32, roundness: f32, feather: f32 },
+    FilmGrain {
+        strength: f32,
+        size: f32,
+    },
+    Halation {
+        strength: f32,
+        spread: f32,
+    },
+    Bloom {
+        threshold: f32,
+        strength: f32,
+        radius: f32,
+    },
+    Vignette {
+        amount: f32,
+        midpoint: f32,
+        roundness: f32,
+        feather: f32,
+    },
     // Technical
-    ColorSpaceTransform { from: ColorSpace, to: ColorSpace },
+    ColorSpaceTransform {
+        from: ColorSpace,
+        to: ColorSpace,
+    },
     Cdl(Cdl),
     // Blur/Sharpen
-    Blur { radius: f32, shape: BlurShape },
-    Sharpen { amount: f32, radius: f32, threshold: f32 },
-    NoiseReduction { spatial: f32, temporal: f32 },
+    Blur {
+        radius: f32,
+        shape: BlurShape,
+    },
+    Sharpen {
+        amount: f32,
+        radius: f32,
+        threshold: f32,
+    },
+    NoiseReduction {
+        spatial: f32,
+        temporal: f32,
+    },
     // Lens
-    LensDistortion { k1: f32, k2: f32, k3: f32 },
-    ChromaticAberration { amount: f32 },
+    LensDistortion {
+        k1: f32,
+        k2: f32,
+        k3: f32,
+    },
+    ChromaticAberration {
+        amount: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -476,10 +649,10 @@ pub struct GradeCache {
 /// Video scopes data
 #[derive(Debug, Clone, Default)]
 pub struct ScopesData {
-    pub waveform: Vec<f32>,     // 256 * 3 (RGB)
-    pub parade: Vec<f32>,       // 256 * 3
-    pub vectorscope: Vec<f32>,  // 256 * 256
-    pub histogram: Vec<f32>,    // 256 * 4 (RGB + Luma)
+    pub waveform: Vec<f32>,    // 256 * 3 (RGB)
+    pub parade: Vec<f32>,      // 256 * 3
+    pub vectorscope: Vec<f32>, // 256 * 256
+    pub histogram: Vec<f32>,   // 256 * 4 (RGB + Luma)
     pub frame: crate::core::time::Frame,
 }
 

@@ -5,9 +5,9 @@
 //! generated. The API mirrors `proxy.rs` so the rest of the crate compiles
 //! unchanged and callers get a clear error rather than a missing type.
 
+use crate::core::error::{AppError, MediaError, Result};
 use crate::core::id::{ClipId, ProxyId};
 use crate::core::time::Frame;
-use crate::core::error::{AppError, MediaError, Result};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -65,7 +65,11 @@ impl Default for ProxyConfig {
 
 impl ProxyConfig {
     pub fn new(cache_dir: PathBuf, preset: ProxyPreset) -> Self {
-        Self { cache_dir, preset, ..Default::default() }
+        Self {
+            cache_dir,
+            preset,
+            ..Default::default()
+        }
     }
 }
 
@@ -124,7 +128,11 @@ impl ProxyManager {
     }
 
     pub fn with_config(config: ProxyConfig) -> Self {
-        Self { config, active: AtomicBool::new(false), proxies: Mutex::new(Vec::new()) }
+        Self {
+            config,
+            active: AtomicBool::new(false),
+            proxies: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn config(&self) -> &ProxyConfig {
@@ -161,7 +169,10 @@ impl ProxyManager {
     }
 
     pub fn clear(&self) {
-        self.proxies.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.proxies
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     pub fn len(&self) -> usize {
@@ -182,7 +193,9 @@ pub struct SmartProxyRenderer {
 
 impl SmartProxyRenderer {
     pub fn new() -> Self {
-        Self { frame_budget_ms: 16.6 }
+        Self {
+            frame_budget_ms: 16.6,
+        }
     }
 
     /// True when `frame_time_ms` exceeds the budget and a proxy should be used.
@@ -214,7 +227,11 @@ mod tests {
         assert_eq!(ProxyPreset::Quarter.target_width(), 480);
         assert_eq!(ProxyPreset::Half.target_bitrate_kbps(), 4000);
         assert_eq!(
-            ProxyPreset::Custom { width: 320, bitrate_kbps: 800 }.target_width(),
+            ProxyPreset::Custom {
+                width: 320,
+                bitrate_kbps: 800
+            }
+            .target_width(),
             320
         );
     }
@@ -232,7 +249,11 @@ mod tests {
 
         m.add(meta(1));
         m.add(meta(1));
-        assert_eq!(m.len(), 1, "re-adding the same clip must replace, not duplicate");
+        assert_eq!(
+            m.len(),
+            1,
+            "re-adding the same clip must replace, not duplicate"
+        );
 
         assert!(m.get(ClipId(1)).is_some());
         assert!(m.remove(ClipId(1)));

@@ -110,7 +110,11 @@ pub fn is_video_transition(transition_type: TransitionType) -> bool {
 
 /// Clamp a requested transition duration into the legal range.
 pub fn clamp_transition_duration(duration: Frame) -> Frame {
-    Frame(duration.0.clamp(min_transition_duration().0, max_transition_duration().0))
+    Frame(
+        duration
+            .0
+            .clamp(min_transition_duration().0, max_transition_duration().0),
+    )
 }
 
 /// Build a transition between two timeline items with sane defaults.

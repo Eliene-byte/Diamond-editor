@@ -1,11 +1,11 @@
 //! DaVinci Clone - Lightweight DaVinci Resolve clone in Rust
 
+pub mod audio;
 pub mod core;
-pub mod media;
-pub mod timeline;
 pub mod effects;
 pub mod gpu;
-pub mod audio;
+pub mod media;
+pub mod timeline;
 pub mod ui;
 
 #[cfg(test)]

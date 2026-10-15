@@ -1,9 +1,11 @@
 //! Undo/Redo system for timeline editing
 
-use crate::core::id::{TrackId, TrackItemId, ClipId, MarkerId, TransitionId, CommandId};
-use crate::core::time::{Frame, FrameRange};
-use crate::core::types::{EditOperation, TrimEdge, TrackType, EffectParams, EffectType, EffectValue};
 use crate::core::error::Result;
+use crate::core::id::{ClipId, CommandId, MarkerId, TrackId, TrackItemId, TransitionId};
+use crate::core::time::{Frame, FrameRange};
+use crate::core::types::{
+    EditOperation, EffectParams, EffectType, EffectValue, TrackType, TrimEdge,
+};
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
@@ -13,8 +15,12 @@ pub trait Command: Send + Sync {
     fn undo(&mut self, timeline: &mut crate::timeline::clip::Timeline) -> Result<()>;
     fn description(&self) -> String;
     fn id(&self) -> CommandId;
-    fn merges_with(&self, other: &dyn Command) -> bool { false }
-    fn merge(&mut self, other: Box<dyn Command>) -> Result<()> { Ok(()) }
+    fn merges_with(&self, other: &dyn Command) -> bool {
+        false
+    }
+    fn merge(&mut self, other: Box<dyn Command>) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Command that stores before/after state
@@ -28,25 +34,90 @@ pub struct StateCommand {
 
 #[derive(Debug, Clone)]
 pub enum Snapshot {
-    ClipAdded { item_id: TrackItemId, data: ItemData },
-    ClipRemoved { item_id: TrackItemId, data: ItemData },
-    ClipMoved { item_id: TrackItemId, from: Frame, to: Frame },
-    ClipTrimmed { item_id: TrackItemId, edge: TrimEdge, from: Frame, to: Frame },
-    ClipSplit { item_id: TrackItemId, new_item_id: TrackItemId, position: Frame },
-    ClipsJoined { item_id_a: TrackItemId, item_id_b: TrackItemId },
-    EffectAdded { item_id: TrackItemId, effect: EffectData },
-    EffectRemoved { item_id: TrackItemId, effect_index: usize },
-    EffectModified { item_id: TrackItemId, effect_index: usize, params: EffectParams },
-    TrackAdded { track_id: TrackId, track_type: TrackType, index: u32 },
-    TrackRemoved { track_id: TrackId },
-    TrackReordered { track_id: TrackId, from_index: u32, to_index: u32 },
-    MarkerAdded { marker_id: MarkerId, position: Frame, data: MarkerData },
-    MarkerRemoved { marker_id: MarkerId },
-    MarkerModified { marker_id: MarkerId, data: MarkerData },
-    TransitionAdded { transition_id: TransitionId, left: TrackItemId, right: TrackItemId, transition_type: EffectType, duration: Frame },
-    TransitionRemoved { transition_id: TransitionId },
-    ProjectSettingsChanged { old: crate::core::types::ProjectSettings, new: crate::core::types::ProjectSettings },
-    TimelineSettingsChanged { old: crate::timeline::clip::TimelineSettings, new: crate::timeline::clip::TimelineSettings },
+    ClipAdded {
+        item_id: TrackItemId,
+        data: ItemData,
+    },
+    ClipRemoved {
+        item_id: TrackItemId,
+        data: ItemData,
+    },
+    ClipMoved {
+        item_id: TrackItemId,
+        from: Frame,
+        to: Frame,
+    },
+    ClipTrimmed {
+        item_id: TrackItemId,
+        edge: TrimEdge,
+        from: Frame,
+        to: Frame,
+    },
+    ClipSplit {
+        item_id: TrackItemId,
+        new_item_id: TrackItemId,
+        position: Frame,
+    },
+    ClipsJoined {
+        item_id_a: TrackItemId,
+        item_id_b: TrackItemId,
+    },
+    EffectAdded {
+        item_id: TrackItemId,
+        effect: EffectData,
+    },
+    EffectRemoved {
+        item_id: TrackItemId,
+        effect_index: usize,
+    },
+    EffectModified {
+        item_id: TrackItemId,
+        effect_index: usize,
+        params: EffectParams,
+    },
+    TrackAdded {
+        track_id: TrackId,
+        track_type: TrackType,
+        index: u32,
+    },
+    TrackRemoved {
+        track_id: TrackId,
+    },
+    TrackReordered {
+        track_id: TrackId,
+        from_index: u32,
+        to_index: u32,
+    },
+    MarkerAdded {
+        marker_id: MarkerId,
+        position: Frame,
+        data: MarkerData,
+    },
+    MarkerRemoved {
+        marker_id: MarkerId,
+    },
+    MarkerModified {
+        marker_id: MarkerId,
+        data: MarkerData,
+    },
+    TransitionAdded {
+        transition_id: TransitionId,
+        left: TrackItemId,
+        right: TrackItemId,
+        transition_type: EffectType,
+        duration: Frame,
+    },
+    TransitionRemoved {
+        transition_id: TransitionId,
+    },
+    ProjectSettingsChanged {
+        old: crate::core::types::ProjectSettings,
+        new: crate::core::types::ProjectSettings,
+    },
+    TimelineSettingsChanged {
+        old: crate::timeline::clip::TimelineSettings,
+        new: crate::timeline::clip::TimelineSettings,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -109,7 +180,9 @@ impl StateCommand {
         }
     }
 
-    pub fn set_executed(&mut self) { self.executed = true; }
+    pub fn set_executed(&mut self) {
+        self.executed = true;
+    }
 }
 
 impl Command for StateCommand {
@@ -131,8 +204,12 @@ impl Command for StateCommand {
         Ok(())
     }
 
-    fn description(&self) -> String { self.description.clone() }
-    fn id(&self) -> CommandId { self.id }
+    fn description(&self) -> String {
+        self.description.clone()
+    }
+    fn id(&self) -> CommandId {
+        self.id
+    }
 }
 
 /// Command history manager
@@ -171,7 +248,7 @@ impl UndoManager {
     pub fn push(&mut self, mut command: Box<dyn Command>) -> Result<()> {
         // Execute command
         command.execute(&mut self.timeline_mut())?;
-        
+
         // Check for merge. The previous command is popped first so its borrow
         // ends before command moves into the stack.
         if let Some(mut last) = self.undo_stack.pop_back() {
@@ -182,18 +259,18 @@ impl UndoManager {
             }
             self.undo_stack.push_back(last);
         }
-        
+
         // Add to undo stack
         self.undo_stack.push_back(command);
-        
+
         // Limit stack size
         while self.undo_stack.len() > self.max_levels {
             self.undo_stack.pop_front();
         }
-        
+
         // Clear redo stack
         self.redo_stack.clear();
-        
+
         Ok(())
     }
 
@@ -217,8 +294,12 @@ impl UndoManager {
         }
     }
 
-    pub fn can_undo(&self) -> bool { !self.undo_stack.is_empty() }
-    pub fn can_redo(&self) -> bool { !self.redo_stack.is_empty() }
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
 
     pub fn undo_description(&self) -> Option<String> {
         self.undo_stack.back().map(|c| c.description())
@@ -242,8 +323,10 @@ impl UndoManager {
 
     pub fn end_group(&mut self) -> Result<()> {
         if let Some(group) = self.current_group.take() {
-            if group.commands.is_empty() { return Ok(()); }
-            
+            if group.commands.is_empty() {
+                return Ok(());
+            }
+
             // Merge into single command
             let mut merged = StateCommand::new(group.description);
             for cmd in group.commands {
@@ -273,7 +356,7 @@ fn apply_snapshot(
 ) -> Result<()> {
     use crate::timeline::clip::TrackItemsMut;
     use crate::timeline::track::{TrackItem, TrackItemKey};
-    
+
     match snapshot {
         Snapshot::ClipAdded { item_id, data } => {
             let mut item = TrackItem {
@@ -306,13 +389,15 @@ fn apply_snapshot(
                 metadata: data.metadata.clone(),
             };
             item.key = TrackItemKey::default();
-            
+
             if let Some(track) = timeline.get_track_mut(data.track_id) {
-                track.items_mut().insert(data.timeline_range.start, item.key);
+                track
+                    .items_mut()
+                    .insert(data.timeline_range.start, item.key);
             }
             timeline.items.insert(*item_id, item);
         }
-        
+
         Snapshot::ClipRemoved { item_id, .. } => {
             if let Some(item) = timeline.items.remove(item_id) {
                 if let Some(track) = timeline.get_track_mut(item.track_id) {
@@ -320,7 +405,7 @@ fn apply_snapshot(
                 }
             }
         }
-        
+
         Snapshot::ClipMoved { item_id, to, .. } => {
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 let duration = item.timeline_duration();
@@ -332,8 +417,10 @@ fn apply_snapshot(
                 timeline.reindex_item(track_id, *item_id);
             }
         }
-        
-        Snapshot::ClipTrimmed { item_id, edge, to, .. } => {
+
+        Snapshot::ClipTrimmed {
+            item_id, edge, to, ..
+        } => {
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 match edge {
                     TrimEdge::In => {
@@ -347,7 +434,7 @@ fn apply_snapshot(
                 }
             }
         }
-        
+
         Snapshot::EffectAdded { item_id, effect } => {
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 item.effects.push(crate::timeline::track::TrackItemEffect {
@@ -358,39 +445,53 @@ fn apply_snapshot(
                 });
             }
         }
-        
-        Snapshot::EffectRemoved { item_id, effect_index } => {
+
+        Snapshot::EffectRemoved {
+            item_id,
+            effect_index,
+        } => {
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 if *effect_index < item.effects.len() {
                     item.effects.remove(*effect_index);
                 }
             }
         }
-        
-        Snapshot::EffectModified { item_id, effect_index, params } => {
+
+        Snapshot::EffectModified {
+            item_id,
+            effect_index,
+            params,
+        } => {
             if let Some(item) = timeline.get_item_mut(*item_id) {
                 if *effect_index < item.effects.len() {
                     item.effects[*effect_index].parameters = params.parameters.clone();
                 }
             }
         }
-        
-        Snapshot::MarkerAdded { marker_id, position, data } => {
-            timeline.markers.insert(*marker_id, crate::timeline::clip::Marker {
-                id: *marker_id,
-                position: *position,
-                duration: data.duration,
-                name: data.name.clone(),
-                note: data.note.clone(),
-                color: data.color,
-                marker_type: data.marker_type,
-            });
+
+        Snapshot::MarkerAdded {
+            marker_id,
+            position,
+            data,
+        } => {
+            timeline.markers.insert(
+                *marker_id,
+                crate::timeline::clip::Marker {
+                    id: *marker_id,
+                    position: *position,
+                    duration: data.duration,
+                    name: data.name.clone(),
+                    note: data.note.clone(),
+                    color: data.color,
+                    marker_type: data.marker_type,
+                },
+            );
         }
-        
+
         Snapshot::MarkerRemoved { marker_id } => {
             timeline.markers.remove(marker_id);
         }
-        
+
         Snapshot::MarkerModified { marker_id, data } => {
             if let Some(marker) = timeline.markers.get_mut(marker_id) {
                 marker.name = data.name.clone();
@@ -400,10 +501,10 @@ fn apply_snapshot(
                 marker.marker_type = data.marker_type;
             }
         }
-        
+
         _ => {}
     }
-    
+
     timeline.update_duration();
     timeline.dirty = true;
     Ok(())

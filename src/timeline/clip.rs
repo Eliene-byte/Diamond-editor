@@ -1,12 +1,14 @@
 //! Timeline clip operations and management
 
-use crate::core::id::{ClipId, TrackId, TrackItemId, ProjectId, TimelineId};
-use crate::core::time::{Frame, FrameRange, Timecode, FrameRate};
-use crate::core::types::{TrackType, MediaType, EditOperation, TrimEdge};
 use crate::core::color::{ColorSpace, PixelFormat};
 use crate::core::error::{Result, TimelineError};
-use crate::timeline::track::{TrackItem, TrackContainer, VideoTrack, AudioTrack, SubtitleTrack, TrackItemKey, TrackItemColor};
+use crate::core::id::{ClipId, ProjectId, TimelineId, TrackId, TrackItemId};
+use crate::core::time::{Frame, FrameRange, FrameRate, Timecode};
+use crate::core::types::{EditOperation, MediaType, TrackType, TrimEdge};
 use crate::media::pool::MediaPool;
+use crate::timeline::track::{
+    AudioTrack, SubtitleTrack, TrackContainer, TrackItem, TrackItemColor, TrackItemKey, VideoTrack,
+};
 use std::collections::HashMap;
 
 /// Timeline clip - higher level representation
@@ -119,45 +121,52 @@ impl Timeline {
         track_id: TrackId,
         timeline_position: Frame,
     ) -> Result<TrackItemId> {
-        let clip = pool.get_clip(clip_id)
+        let clip = pool
+            .get_clip(clip_id)
             .ok_or(TimelineError::ClipNotFound(clip_id.to_string()))?;
-        
+
         let track_type = match clip.metadata.media_type {
             MediaType::Video => TrackType::Video,
             MediaType::Audio => TrackType::Audio,
             MediaType::Image => TrackType::Video,
             _ => TrackType::Video,
         };
-        
+
         // Verify track type matches
         let (locked, track_item_count) = match track_type {
             TrackType::Video => {
-                let t = self.tracks.get_video_track_mut(track_id)
+                let t = self
+                    .tracks
+                    .get_video_track_mut(track_id)
                     .ok_or(TimelineError::TrackNotFound(track_id.to_string()))?;
                 (t.locked, t.items.len() as u32)
             }
             TrackType::Audio => {
-                let t = self.tracks.get_audio_track_mut(track_id)
+                let t = self
+                    .tracks
+                    .get_audio_track_mut(track_id)
                     .ok_or(TimelineError::TrackNotFound(track_id.to_string()))?;
                 (t.locked, t.items.len() as u32)
             }
             TrackType::Subtitle => {
-                let t = self.tracks.get_subtitle_track_mut(track_id)
+                let t = self
+                    .tracks
+                    .get_subtitle_track_mut(track_id)
                     .ok_or(TimelineError::TrackNotFound(track_id.to_string()))?;
                 (t.locked, t.items.len() as u32)
             }
         };
-        
+
         if locked {
             return Err(TimelineError::TrackLocked(track_id.to_string()).into());
         }
-        
+
         // Find available space if position is occupied
         let position = self.find_space(track_id, timeline_position, clip.metadata.duration)?;
-        
+
         let source_range = FrameRange::new(Frame::ZERO, clip.metadata.duration);
         let timeline_range = FrameRange::new(position, position + clip.metadata.duration);
-        
+
         let mut item = TrackItem::new(
             track_id,
             Some(clip_id),
@@ -165,23 +174,28 @@ impl Timeline {
             position,
             track_item_count,
         );
-        
+
         item.metadata.name = clip.metadata.tags.name.clone();
-        item.color = clip.metadata.tags.color_label.map(|c| match c {
-            crate::core::types::ColorLabel::Red => TrackItemColor::Red,
-            crate::core::types::ColorLabel::Orange => TrackItemColor::Orange,
-            crate::core::types::ColorLabel::Yellow => TrackItemColor::Yellow,
-            crate::core::types::ColorLabel::Green => TrackItemColor::Green,
-            crate::core::types::ColorLabel::Cyan => TrackItemColor::Cyan,
-            crate::core::types::ColorLabel::Blue => TrackItemColor::Blue,
-            crate::core::types::ColorLabel::Purple => TrackItemColor::Purple,
-            crate::core::types::ColorLabel::Pink => TrackItemColor::Pink,
-            _ => TrackItemColor::None,
-        }).unwrap_or(TrackItemColor::None);
-        
+        item.color = clip
+            .metadata
+            .tags
+            .color_label
+            .map(|c| match c {
+                crate::core::types::ColorLabel::Red => TrackItemColor::Red,
+                crate::core::types::ColorLabel::Orange => TrackItemColor::Orange,
+                crate::core::types::ColorLabel::Yellow => TrackItemColor::Yellow,
+                crate::core::types::ColorLabel::Green => TrackItemColor::Green,
+                crate::core::types::ColorLabel::Cyan => TrackItemColor::Cyan,
+                crate::core::types::ColorLabel::Blue => TrackItemColor::Blue,
+                crate::core::types::ColorLabel::Purple => TrackItemColor::Purple,
+                crate::core::types::ColorLabel::Pink => TrackItemColor::Pink,
+                _ => TrackItemColor::None,
+            })
+            .unwrap_or(TrackItemColor::None);
+
         let item_key = item.key;
         let item_id = item.id;
-        
+
         // Add to track
         match track_type {
             TrackType::Video => {
@@ -200,11 +214,11 @@ impl Timeline {
                 }
             }
         }
-        
+
         self.items.insert(item_id, item);
         self.update_duration();
         self.dirty = true;
-        
+
         Ok(item_id)
     }
 
@@ -214,14 +228,17 @@ impl Timeline {
             Some(t) => t,
             None => return Ok(preferred),
         };
-        
+
         let mut position = preferred;
         let end = position + duration;
-        
+
         // Check for overlaps
         for (_, item_key) in track.items().range(..end) {
             if let Some(item) = self.item_by_key(*item_key) {
-                if item.timeline_range.intersects(FrameRange::new(position, end)) {
+                if item
+                    .timeline_range
+                    .intersects(FrameRange::new(position, end))
+                {
                     // Move to after this item
                     position = item.timeline_range.end;
                     // Restart check
@@ -229,15 +246,24 @@ impl Timeline {
                 }
             }
         }
-        
+
         Ok(position)
     }
 
     pub(crate) fn get_track(&self, track_id: TrackId) -> Option<&dyn TrackItems> {
-        self.tracks.get_video_track(track_id)
+        self.tracks
+            .get_video_track(track_id)
             .map(|t| t as &dyn TrackItems)
-            .or_else(|| self.tracks.get_audio_track(track_id).map(|t| t as &dyn TrackItems))
-            .or_else(|| self.tracks.get_subtitle_track(track_id).map(|t| t as &dyn TrackItems))
+            .or_else(|| {
+                self.tracks
+                    .get_audio_track(track_id)
+                    .map(|t| t as &dyn TrackItems)
+            })
+            .or_else(|| {
+                self.tracks
+                    .get_subtitle_track(track_id)
+                    .map(|t| t as &dyn TrackItems)
+            })
     }
 
     pub fn remove_clip(&mut self, item_id: TrackItemId) -> Option<TrackItem> {
@@ -262,40 +288,61 @@ impl Timeline {
         // `if let` chain would keep every branch's `&mut self.tracks` borrow
         // alive at once.
         match self.get_track_type(track_id).ok()? {
-            TrackType::Video => self.tracks.get_video_track_mut(track_id)
+            TrackType::Video => self
+                .tracks
+                .get_video_track_mut(track_id)
                 .map(|t| t as &mut dyn TrackItemsMut),
-            TrackType::Audio => self.tracks.get_audio_track_mut(track_id)
+            TrackType::Audio => self
+                .tracks
+                .get_audio_track_mut(track_id)
                 .map(|t| t as &mut dyn TrackItemsMut),
-            TrackType::Subtitle => self.tracks.get_subtitle_track_mut(track_id)
+            TrackType::Subtitle => self
+                .tracks
+                .get_subtitle_track_mut(track_id)
                 .map(|t| t as &mut dyn TrackItemsMut),
         }
     }
 
-    pub fn move_clip(&mut self, item_id: TrackItemId, new_position: Frame, new_track: Option<TrackId>) -> Result<()> {
+    pub fn move_clip(
+        &mut self,
+        item_id: TrackItemId,
+        new_position: Frame,
+        new_track: Option<TrackId>,
+    ) -> Result<()> {
         // Read the item through a shared borrow first: the track lookups below
         // need `&mut self`, which cannot coexist with a live `&mut TrackItem`.
         let (old_track_id, old_start, item_key, duration) = {
-            let item = self.items.get(&item_id)
+            let item = self
+                .items
+                .get(&item_id)
                 .ok_or(TimelineError::ClipNotFound(item_id.to_string()))?;
-            (item.track_id, item.timeline_in(), item.key, item.timeline_duration())
+            (
+                item.track_id,
+                item.timeline_in(),
+                item.key,
+                item.timeline_duration(),
+            )
         };
-        
+
         let target_track_id = new_track.unwrap_or(old_track_id);
-        
+
         if target_track_id != old_track_id {
             // Move between tracks
             let track_type = self.get_track_type(target_track_id)?;
             let item_track_type = self.get_track_type(old_track_id)?;
-            
+
             if track_type != item_track_type {
-                return Err(TimelineError::InvalidOperation("Cannot move clip to different track type".into()).into());
+                return Err(TimelineError::InvalidOperation(
+                    "Cannot move clip to different track type".into(),
+                )
+                .into());
             }
-            
+
             // Remove from old track
             if let Some(track) = self.get_track_mut(old_track_id) {
                 track.items_mut().remove(&old_start);
             }
-            
+
             // Add to new track
             if let Some(track) = self.get_track_mut(target_track_id) {
                 track.items_mut().insert(new_position, item_key);
@@ -307,56 +354,73 @@ impl Timeline {
                 track.items_mut().insert(new_position, item_key);
             }
         }
-        
+
         if let Some(item) = self.items.get_mut(&item_id) {
             item.track_id = target_track_id;
             item.timeline_range = FrameRange::new(new_position, new_position + duration);
         }
-        
+
         self.update_duration();
         self.dirty = true;
         Ok(())
     }
 
-    pub fn trim_clip(&mut self, item_id: TrackItemId, edge: TrimEdge, new_position: Frame) -> Result<()> {
+    pub fn trim_clip(
+        &mut self,
+        item_id: TrackItemId,
+        edge: TrimEdge,
+        new_position: Frame,
+    ) -> Result<()> {
         let (locked, track_id, old_in, item_key) = {
-            let item = self.items.get(&item_id)
+            let item = self
+                .items
+                .get(&item_id)
                 .ok_or(TimelineError::ClipNotFound(item_id.to_string()))?;
             (item.locked, item.track_id, item.timeline_in(), item.key)
         };
-        
+
         if locked {
             return Err(TimelineError::InvalidTrim("Clip is locked".into()).into());
         }
-        
+
         if let Some(item) = self.items.get_mut(&item_id) {
             match edge {
                 TrimEdge::In => {
                     if new_position >= item.timeline_out() {
-                        return Err(TimelineError::InvalidTrim("In point cannot be at or after out point".into()).into());
+                        return Err(TimelineError::InvalidTrim(
+                            "In point cannot be at or after out point".into(),
+                        )
+                        .into());
                     }
                     let delta = new_position - item.timeline_in();
                     item.trim_in(delta);
                 }
                 TrimEdge::Out => {
                     if new_position <= item.timeline_in() {
-                        return Err(TimelineError::InvalidTrim("Out point cannot be at or before in point".into()).into());
+                        return Err(TimelineError::InvalidTrim(
+                            "Out point cannot be at or before in point".into(),
+                        )
+                        .into());
                     }
                     let delta = new_position - item.timeline_out();
                     item.trim_out(delta);
                 }
             }
         }
-        
+
         // Update track index
-        let new_in = self.items.get(&item_id)
+        let new_in = self
+            .items
+            .get(&item_id)
             .map(|item| item.timeline_in())
             .unwrap_or(old_in);
         if let Some(track) = self.get_track_mut(track_id) {
-            track.items_mut().remove(&(new_in - (new_position - new_in)));
+            track
+                .items_mut()
+                .remove(&(new_in - (new_position - new_in)));
             track.items_mut().insert(new_in, item_key);
         }
-        
+
         self.update_duration();
         self.dirty = true;
         Ok(())
@@ -366,54 +430,70 @@ impl Timeline {
         // Scope the shared borrow of `self.items` so the track insert below can
         // take `&mut self`.
         let (mut right_item, left_duration, right_duration, track_id, source_in, source_out) = {
-            let item = self.items.get(&item_id)
+            let item = self
+                .items
+                .get(&item_id)
                 .ok_or(TimelineError::ClipNotFound(item_id.to_string()))?;
-            
+
             if !item.timeline_range.contains(position) || position == item.timeline_in() {
-                return Err(TimelineError::InvalidSplit("Split position must be within clip".into()).into());
+                return Err(TimelineError::InvalidSplit(
+                    "Split position must be within clip".into(),
+                )
+                .into());
             }
-            
+
             let left_duration = position - item.timeline_in();
             let right_duration = item.timeline_out() - position;
-            
+
             // Create new item for the right portion
             let mut right_item = item.clone();
             right_item.id = TrackItemId::generate();
             right_item.key = TrackItemKey::default();
-            
-            (right_item, left_duration, right_duration, item.track_id, item.source_in(), item.source_out())
+
+            (
+                right_item,
+                left_duration,
+                right_duration,
+                item.track_id,
+                item.source_in(),
+                item.source_out(),
+            )
         };
-        
+
         // Update left item
         if let Some(left) = self.items.get_mut(&item_id) {
             left.timeline_range = FrameRange::new(left.timeline_in(), position);
             left.source_range = FrameRange::new(left.source_in(), left.source_in() + left_duration);
         }
-        
+
         // Setup right item
         right_item.timeline_range = FrameRange::new(position, position + right_duration);
         right_item.source_range = FrameRange::new(source_in + left_duration, source_out);
-        
+
         let right_key = right_item.key;
         let right_id = right_item.id;
-        
+
         // Insert into track
         if let Some(track) = self.get_track_mut(track_id) {
             track.items_mut().insert(position, right_key);
         }
-        
+
         self.items.insert(right_id, right_item);
         self.dirty = true;
-        
+
         Ok(right_id)
     }
 
     pub fn join_clips(&mut self, item_id_a: TrackItemId, item_id_b: TrackItemId) -> Result<()> {
-        let item_a = self.items.get(&item_id_a)
+        let item_a = self
+            .items
+            .get(&item_id_a)
             .ok_or(TimelineError::ClipNotFound(item_id_a.to_string()))?;
-        let item_b = self.items.get(&item_id_b)
+        let item_b = self
+            .items
+            .get(&item_id_b)
             .ok_or(TimelineError::ClipNotFound(item_id_b.to_string()))?;
-        
+
         // Must be on same track, same clip, adjacent
         if item_a.track_id != item_b.track_id {
             return Err(TimelineError::CannotJoin("Clips on different tracks".into()).into());
@@ -427,14 +507,14 @@ impl Timeline {
         if item_a.source_out() != item_b.source_in() {
             return Err(TimelineError::CannotJoin("Source ranges are not adjacent".into()).into());
         }
-        
+
         // Merge B into A
         let (b_timeline_out, b_source_out) = (item_b.timeline_out(), item_b.source_out());
         if let Some(merged) = self.items.get_mut(&item_id_a) {
             merged.timeline_range = FrameRange::new(merged.timeline_in(), b_timeline_out);
             merged.source_range = FrameRange::new(merged.source_in(), b_source_out);
         }
-        
+
         // Remove B
         self.remove_clip(item_id_b);
         self.dirty = true;
@@ -442,9 +522,15 @@ impl Timeline {
     }
 
     fn get_track_type(&self, track_id: TrackId) -> Result<TrackType> {
-        if self.tracks.get_video_track(track_id).is_some() { return Ok(TrackType::Video); }
-        if self.tracks.get_audio_track(track_id).is_some() { return Ok(TrackType::Audio); }
-        if self.tracks.get_subtitle_track(track_id).is_some() { return Ok(TrackType::Subtitle); }
+        if self.tracks.get_video_track(track_id).is_some() {
+            return Ok(TrackType::Video);
+        }
+        if self.tracks.get_audio_track(track_id).is_some() {
+            return Ok(TrackType::Audio);
+        }
+        if self.tracks.get_subtitle_track(track_id).is_some() {
+            return Ok(TrackType::Subtitle);
+        }
         Err(TimelineError::TrackNotFound(track_id.to_string()).into())
     }
 
@@ -493,7 +579,9 @@ impl Timeline {
         } else if let Some(t) = self.tracks.get_audio_track_mut(track_id) {
             Some(t as &mut dyn TrackItemsMut)
         } else {
-            self.tracks.get_subtitle_track_mut(track_id).map(|t| t as &mut dyn TrackItemsMut)
+            self.tracks
+                .get_subtitle_track_mut(track_id)
+                .map(|t| t as &mut dyn TrackItemsMut)
         };
 
         if let Some(track) = track {
@@ -504,19 +592,26 @@ impl Timeline {
     }
 
     pub fn items_at_frame(&self, frame: Frame) -> Vec<&TrackItem> {
-        self.items.values()
+        self.items
+            .values()
             .filter(|item| item.timeline_range.contains(frame))
             .collect()
     }
 
     pub fn items_in_range(&self, range: FrameRange) -> Vec<&TrackItem> {
-        self.items.values()
+        self.items
+            .values()
             .filter(|item| item.timeline_range.intersects(range))
             .collect()
     }
 
     // Markers
-    pub fn add_marker(&mut self, position: Frame, name: String, marker_type: crate::core::types::MarkerType) -> crate::core::id::MarkerId {
+    pub fn add_marker(
+        &mut self,
+        position: Frame,
+        name: String,
+        marker_type: crate::core::types::MarkerType,
+    ) -> crate::core::id::MarkerId {
         let id = crate::core::id::MarkerId::generate();
         let marker = Marker {
             id,
@@ -542,7 +637,8 @@ impl Timeline {
     }
 
     pub fn markers_in_range(&self, range: FrameRange) -> Vec<&Marker> {
-        self.markers.values()
+        self.markers
+            .values()
             .filter(|m| range.contains(m.position))
             .collect()
     }
@@ -561,25 +657,37 @@ pub(crate) trait TrackItemsMut {
 }
 
 impl TrackItems for VideoTrack {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> { &self.items }
+    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> {
+        &self.items
+    }
 }
 
 impl TrackItems for AudioTrack {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> { &self.items }
+    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> {
+        &self.items
+    }
 }
 
 impl TrackItems for SubtitleTrack {
-    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> { &self.items }
+    fn items(&self) -> &std::collections::BTreeMap<Frame, TrackItemKey> {
+        &self.items
+    }
 }
 
 impl TrackItemsMut for VideoTrack {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> { &mut self.items }
+    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> {
+        &mut self.items
+    }
 }
 
 impl TrackItemsMut for AudioTrack {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> { &mut self.items }
+    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> {
+        &mut self.items
+    }
 }
 
 impl TrackItemsMut for SubtitleTrack {
-    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> { &mut self.items }
+    fn items_mut(&mut self) -> &mut std::collections::BTreeMap<Frame, TrackItemKey> {
+        &mut self.items
+    }
 }

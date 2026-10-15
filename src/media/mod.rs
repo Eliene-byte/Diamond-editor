@@ -7,8 +7,8 @@
 //! CI's core-only and cpu-only matrix entries included — and so does the
 //! `--no-default-features` path developers use for fast checks.
 
-pub mod frame;
 pub mod cache;
+pub mod frame;
 pub mod pool;
 
 // --- Backend-gated modules -------------------------------------------------
@@ -55,27 +55,27 @@ pub mod metadata;
 pub mod metadata;
 
 // --- Re-exports ------------------------------------------------------------
-pub use frame::{AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData};
-pub use decoder::{AudioDecoder, MediaDecoder, VideoDecoder};
 pub use cache::{
     CacheCompression, CacheConfig, CacheQuality, CacheStats, MediaCache, PlaybackDirection,
     PredictiveFrameCache,
 };
+pub use decoder::{AudioDecoder, MediaDecoder, VideoDecoder};
+pub use frame::{AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData};
 pub use pool::{ClipStatus, MediaPool, PoolBin, PoolClip, PoolEvent, PoolObserver, PoolStats};
 
-pub use scanner::{
-    AudioStreamInfo, BatchImporter, ImportFailure, ImportResult, MediaScanner, QuickProbeInfo,
-    ScanEvent, SubtitleStreamInfo, VideoStreamInfo, detect_media_type,
+pub use metadata::{
+    AudioStreamMetadata, ChapterMetadata, MediaMetadata, Rational, SubtitleStreamMetadata,
+    VideoStreamMetadata,
 };
 pub use proxy::{
     ProxyConfig, ProxyGenerator, ProxyManager, ProxyMetadata, ProxyPreset, SmartProxyRenderer,
+};
+pub use scanner::{
+    detect_media_type, AudioStreamInfo, BatchImporter, ImportFailure, ImportResult, MediaScanner,
+    QuickProbeInfo, ScanEvent, SubtitleStreamInfo, VideoStreamInfo,
 };
 pub use thumbnail::{ThumbnailCache, ThumbnailFormat, ThumbnailGenerator, ThumbnailSprite};
 pub use waveform::{
     MultiResolutionWaveform, Waveform, WaveformCache, WaveformGenerator, WaveformLevel,
     WaveformPeak,
-};
-pub use metadata::{
-    AudioStreamMetadata, ChapterMetadata, MediaMetadata, Rational, SubtitleStreamMetadata,
-    VideoStreamMetadata,
 };

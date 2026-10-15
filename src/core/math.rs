@@ -1,8 +1,8 @@
 //! Math utilities for video editing
 //! SIMD-optimized where possible
 
-use glam::{Vec2, Vec3, Vec4, Mat3, Mat4, Quat};
-use std::ops::{Add, Sub, Mul, Div};
+use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
+use std::ops::{Add, Div, Mul, Sub};
 
 /// 2D point with frame precision
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -13,32 +13,67 @@ pub struct Point2 {
 
 impl Point2 {
     pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
-    pub const fn new(x: f32, y: f32) -> Self { Self { x, y } }
-    pub fn from_vec2(v: Vec2) -> Self { Self { x: v.x, y: v.y } }
-    pub fn to_vec2(self) -> Vec2 { Vec2::new(self.x, self.y) }
-    pub fn distance(self, other: Self) -> f32 { (self - other).length() }
-    pub fn length(self) -> f32 { (self.x * self.x + self.y * self.y).sqrt() }
-    pub fn lerp(self, other: Self, t: f32) -> Self { Self { x: self.x + (other.x - self.x) * t, y: self.y + (other.y - self.y) * t } }
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+    pub fn from_vec2(v: Vec2) -> Self {
+        Self { x: v.x, y: v.y }
+    }
+    pub fn to_vec2(self) -> Vec2 {
+        Vec2::new(self.x, self.y)
+    }
+    pub fn distance(self, other: Self) -> f32 {
+        (self - other).length()
+    }
+    pub fn length(self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+    pub fn lerp(self, other: Self, t: f32) -> Self {
+        Self {
+            x: self.x + (other.x - self.x) * t,
+            y: self.y + (other.y - self.y) * t,
+        }
+    }
 }
 
 impl Add for Point2 {
     type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output { Self { x: self.x + rhs.x, y: self.y + rhs.y } }
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
 }
 
 impl Sub for Point2 {
     type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output { Self { x: self.x - rhs.x, y: self.y - rhs.y } }
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
 }
 
 impl Mul<f32> for Point2 {
     type Output = Self;
-    fn mul(self, rhs: f32) -> Self::Output { Self { x: self.x * rhs, y: self.y * rhs } }
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
 }
 
 impl Div<f32> for Point2 {
     type Output = Self;
-    fn div(self, rhs: f32) -> Self::Output { Self { x: self.x / rhs, y: self.y / rhs } }
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
+    }
 }
 
 /// Rectangle with float coordinates
@@ -51,20 +86,33 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self { Self { x, y, w, h } }
+    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+        Self { x, y, w, h }
+    }
     pub const fn from_points(min: Point2, max: Point2) -> Self {
-        Self { x: min.x, y: min.y, w: max.x - min.x, h: max.y - min.y }
+        Self {
+            x: min.x,
+            y: min.y,
+            w: max.x - min.x,
+            h: max.y - min.y,
+        }
     }
     pub const fn contains(self, p: Point2) -> bool {
         p.x >= self.x && p.x < self.x + self.w && p.y >= self.y && p.y < self.y + self.h
     }
-    pub const fn center(self) -> Point2 { Point2::new(self.x + self.w * 0.5, self.y + self.h * 0.5) }
+    pub const fn center(self) -> Point2 {
+        Point2::new(self.x + self.w * 0.5, self.y + self.h * 0.5)
+    }
     pub fn intersect(self, other: Self) -> Option<Self> {
         let x1 = self.x.max(other.x);
         let y1 = self.y.max(other.y);
         let x2 = (self.x + self.w).min(other.x + other.w);
         let y2 = (self.y + self.h).min(other.y + other.h);
-        if x1 < x2 && y1 < y2 { Some(Self::new(x1, y1, x2 - x1, y2 - y1)) } else { None }
+        if x1 < x2 && y1 < y2 {
+            Some(Self::new(x1, y1, x2 - x1, y2 - y1))
+        } else {
+            None
+        }
     }
     pub fn union(self, other: Self) -> Self {
         let x1 = self.x.min(other.x);
@@ -74,7 +122,12 @@ impl Rect {
         Self::new(x1, y1, x2 - x1, y2 - y1)
     }
     pub fn inflate(self, dx: f32, dy: f32) -> Self {
-        Self::new(self.x - dx, self.y - dy, self.w + 2.0 * dx, self.h + 2.0 * dy)
+        Self::new(
+            self.x - dx,
+            self.y - dy,
+            self.w + 2.0 * dx,
+            self.h + 2.0 * dy,
+        )
     }
 }
 
@@ -85,28 +138,40 @@ pub struct Transform2D {
 }
 
 impl Transform2D {
-    pub const IDENTITY: Self = Self { m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] };
+    pub const IDENTITY: Self = Self {
+        m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    };
 
     pub fn translate(x: f32, y: f32) -> Self {
-        Self { m: [[1.0, 0.0, x], [0.0, 1.0, y], [0.0, 0.0, 1.0]] }
+        Self {
+            m: [[1.0, 0.0, x], [0.0, 1.0, y], [0.0, 0.0, 1.0]],
+        }
     }
     pub fn scale(x: f32, y: f32) -> Self {
-        Self { m: [[x, 0.0, 0.0], [0.0, y, 0.0], [0.0, 0.0, 1.0]] }
+        Self {
+            m: [[x, 0.0, 0.0], [0.0, y, 0.0], [0.0, 0.0, 1.0]],
+        }
     }
     pub fn rotate(angle: f32) -> Self {
         let c = angle.cos();
         let s = angle.sin();
-        Self { m: [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]] }
+        Self {
+            m: [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]],
+        }
     }
     pub fn shear(x: f32, y: f32) -> Self {
-        Self { m: [[1.0, x, 0.0], [y, 1.0, 0.0], [0.0, 0.0, 1.0]] }
+        Self {
+            m: [[1.0, x, 0.0], [y, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        }
     }
 
     pub fn multiply(self, other: Self) -> Self {
         let mut m = [[0.0; 3]; 3];
         for i in 0..3 {
             for j in 0..3 {
-                m[i][j] = self.m[i][0] * other.m[0][j] + self.m[i][1] * other.m[1][j] + self.m[i][2] * other.m[2][j];
+                m[i][j] = self.m[i][0] * other.m[0][j]
+                    + self.m[i][1] * other.m[1][j]
+                    + self.m[i][2] * other.m[2][j];
             }
         }
         Self { m }
@@ -116,7 +181,11 @@ impl Transform2D {
         let x = self.m[0][0] * p.x + self.m[0][1] * p.y + self.m[0][2];
         let y = self.m[1][0] * p.x + self.m[1][1] * p.y + self.m[1][2];
         let w = self.m[2][0] * p.x + self.m[2][1] * p.y + self.m[2][2];
-        if w != 0.0 && w != 1.0 { Point2::new(x / w, y / w) } else { Point2::new(x, y) }
+        if w != 0.0 && w != 1.0 {
+            Point2::new(x / w, y / w)
+        } else {
+            Point2::new(x, y)
+        }
     }
 
     pub fn transform_vector(self, v: Vec2) -> Vec2 {
@@ -130,7 +199,9 @@ impl Transform2D {
         let det = self.m[0][0] * (self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1])
             - self.m[0][1] * (self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0])
             + self.m[0][2] * (self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0]);
-        if det.abs() < 1e-6 { return None; }
+        if det.abs() < 1e-6 {
+            return None;
+        }
         let inv_det = 1.0 / det;
         let mut m = [[0.0; 3]; 3];
         m[0][0] = (self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1]) * inv_det;
@@ -151,7 +222,9 @@ impl Transform2D {
         let ty = self.m[1][2];
         let sx = (self.m[0][0] * self.m[0][0] + self.m[1][0] * self.m[1][0]).sqrt();
         let sy = (self.m[0][1] * self.m[0][1] + self.m[1][1] * self.m[1][1]).sqrt();
-        if sx < 1e-6 || sy < 1e-6 { return None; }
+        if sx < 1e-6 || sy < 1e-6 {
+            return None;
+        }
         let rot = self.m[1][0].atan2(self.m[0][0]);
         Some((Vec2::new(tx, ty), rot, Vec2::new(sx, sy)))
     }
@@ -159,38 +232,112 @@ impl Transform2D {
 
 /// Easing functions for animation
 pub mod easing {
-    pub fn linear(t: f32) -> f32 { t }
-    pub fn ease_in_quad(t: f32) -> f32 { t * t }
-    pub fn ease_out_quad(t: f32) -> f32 { 1.0 - (1.0 - t) * (1.0 - t) }
+    pub fn linear(t: f32) -> f32 {
+        t
+    }
+    pub fn ease_in_quad(t: f32) -> f32 {
+        t * t
+    }
+    pub fn ease_out_quad(t: f32) -> f32 {
+        1.0 - (1.0 - t) * (1.0 - t)
+    }
     pub fn ease_in_out_quad(t: f32) -> f32 {
-        if t < 0.5 { 2.0 * t * t } else { 1.0 - 2.0 * (1.0 - t) * (1.0 - t) }
+        if t < 0.5 {
+            2.0 * t * t
+        } else {
+            1.0 - 2.0 * (1.0 - t) * (1.0 - t)
+        }
     }
-    pub fn ease_in_cubic(t: f32) -> f32 { t * t * t }
-    pub fn ease_out_cubic(t: f32) -> f32 { 1.0 - (1.0 - t).powi(3) }
+    pub fn ease_in_cubic(t: f32) -> f32 {
+        t * t * t
+    }
+    pub fn ease_out_cubic(t: f32) -> f32 {
+        1.0 - (1.0 - t).powi(3)
+    }
     pub fn ease_in_out_cubic(t: f32) -> f32 {
-        if t < 0.5 { 4.0 * t * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0 }
+        if t < 0.5 {
+            4.0 * t * t * t
+        } else {
+            1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+        }
     }
-    pub fn ease_in_quart(t: f32) -> f32 { t * t * t * t }
-    pub fn ease_out_quart(t: f32) -> f32 { 1.0 - (1.0 - t).powi(4) }
+    pub fn ease_in_quart(t: f32) -> f32 {
+        t * t * t * t
+    }
+    pub fn ease_out_quart(t: f32) -> f32 {
+        1.0 - (1.0 - t).powi(4)
+    }
     pub fn ease_in_out_quart(t: f32) -> f32 {
-        if t < 0.5 { 8.0 * t * t * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(4) / 2.0 }
+        if t < 0.5 {
+            8.0 * t * t * t * t
+        } else {
+            1.0 - (-2.0 * t + 2.0).powi(4) / 2.0
+        }
     }
-    pub fn ease_in_expo(t: f32) -> f32 { if t == 0.0 { 0.0 } else { 2.0_f32.powf(10.0 * (t - 1.0)) } }
-    pub fn ease_out_expo(t: f32) -> f32 { if t == 1.0 { 1.0 } else { 1.0 - 2.0_f32.powf(-10.0 * t) } }
+    pub fn ease_in_expo(t: f32) -> f32 {
+        if t == 0.0 {
+            0.0
+        } else {
+            2.0_f32.powf(10.0 * (t - 1.0))
+        }
+    }
+    pub fn ease_out_expo(t: f32) -> f32 {
+        if t == 1.0 {
+            1.0
+        } else {
+            1.0 - 2.0_f32.powf(-10.0 * t)
+        }
+    }
     pub fn ease_in_out_expo(t: f32) -> f32 {
-        if t == 0.0 { 0.0 } else if t == 1.0 { 1.0 } else if t < 0.5 { 2.0_f32.powf(20.0 * t - 10.0) / 2.0 } else { (2.0 - 2.0_f32.powf(-20.0 * t + 10.0)) / 2.0 }
+        if t == 0.0 {
+            0.0
+        } else if t == 1.0 {
+            1.0
+        } else if t < 0.5 {
+            2.0_f32.powf(20.0 * t - 10.0) / 2.0
+        } else {
+            (2.0 - 2.0_f32.powf(-20.0 * t + 10.0)) / 2.0
+        }
     }
-    pub fn ease_in_back(t: f32) -> f32 { let c = 1.70158; (c + 1.0) * t * t * t - c * t * t }
-    pub fn ease_out_back(t: f32) -> f32 { let c = 1.70158; 1.0 + (c + 1.0) * (t - 1.0).powi(3) + c * (t - 1.0).powi(2) }
-    pub fn ease_in_out_back(t: f32) -> f32 { let c = 1.70158 * 1.525; if t < 0.5 { (2.0 * t).powi(2) * ((c + 1.0) * 2.0 * t - c) / 2.0 } else { ((2.0 * t - 2.0).powi(2) * ((c + 1.0) * (2.0 * t - 2.0) + c) + 2.0) / 2.0 } }
+    pub fn ease_in_back(t: f32) -> f32 {
+        let c = 1.70158;
+        (c + 1.0) * t * t * t - c * t * t
+    }
+    pub fn ease_out_back(t: f32) -> f32 {
+        let c = 1.70158;
+        1.0 + (c + 1.0) * (t - 1.0).powi(3) + c * (t - 1.0).powi(2)
+    }
+    pub fn ease_in_out_back(t: f32) -> f32 {
+        let c = 1.70158 * 1.525;
+        if t < 0.5 {
+            (2.0 * t).powi(2) * ((c + 1.0) * 2.0 * t - c) / 2.0
+        } else {
+            ((2.0 * t - 2.0).powi(2) * ((c + 1.0) * (2.0 * t - 2.0) + c) + 2.0) / 2.0
+        }
+    }
     pub fn ease_out_elastic(t: f32) -> f32 {
-        if t == 0.0 { 0.0 } else if t == 1.0 { 1.0 } else { 2.0_f32.powf(-10.0 * t) * (t * 10.0 - 0.75) * (2.0 * std::f32::consts::PI / 3.0).sin() + 1.0 }
+        if t == 0.0 {
+            0.0
+        } else if t == 1.0 {
+            1.0
+        } else {
+            2.0_f32.powf(-10.0 * t) * (t * 10.0 - 0.75) * (2.0 * std::f32::consts::PI / 3.0).sin()
+                + 1.0
+        }
     }
     pub fn ease_out_bounce(t: f32) -> f32 {
-        if t < 1.0 / 2.75 { 7.5625 * t * t }
-        else if t < 2.0 / 2.75 { let t = t - 1.5 / 2.75; 7.5625 * t * t + 0.75 }
-        else if t < 2.5 / 2.75 { let t = t - 2.25 / 2.75; 7.5625 * t * t + 0.9375 }
-        else { let t = t - 2.625 / 2.75; 7.5625 * t * t + 0.984375 }
+        if t < 1.0 / 2.75 {
+            7.5625 * t * t
+        } else if t < 2.0 / 2.75 {
+            let t = t - 1.5 / 2.75;
+            7.5625 * t * t + 0.75
+        } else if t < 2.5 / 2.75 {
+            let t = t - 2.25 / 2.75;
+            7.5625 * t * t + 0.9375
+        } else {
+            let t = t - 2.625 / 2.75;
+            7.5625 * t * t + 0.984375
+        }
     }
     pub fn cubic_bezier(t: f32, p1: f32, p2: f32, p3: f32, p4: f32) -> f32 {
         let u = 1.0 - t;
@@ -201,7 +348,7 @@ pub mod easing {
 /// Interpolation for keyframes
 pub mod interp {
     use super::easing;
-    use crate::core::types::{Interpolation, Easing};
+    use crate::core::types::{Easing, Interpolation};
 
     pub fn interpolate(a: f32, b: f32, t: f32, interp: Interpolation, easing: Easing) -> f32 {
         let t = match interp {
@@ -224,12 +371,24 @@ pub mod interp {
         }
     }
 
-    pub fn interpolate_vec3(a: glam::Vec3, b: glam::Vec3, t: f32, interp: Interpolation, easing: Easing) -> glam::Vec3 {
+    pub fn interpolate_vec3(
+        a: glam::Vec3,
+        b: glam::Vec3,
+        t: f32,
+        interp: Interpolation,
+        easing: Easing,
+    ) -> glam::Vec3 {
         let t = apply_easing(t, easing);
         a.lerp(b, t)
     }
 
-    pub fn interpolate_color(a: [f32; 3], b: [f32; 3], t: f32, interp: Interpolation, easing: Easing) -> [f32; 3] {
+    pub fn interpolate_color(
+        a: [f32; 3],
+        b: [f32; 3],
+        t: f32,
+        interp: Interpolation,
+        easing: Easing,
+    ) -> [f32; 3] {
         let t = apply_easing(t, easing);
         [
             a[0] + (b[0] - a[0]) * t,
@@ -262,7 +421,12 @@ impl<T: Clone> Bvh2D<T> {
 
     fn build(nodes: &mut Vec<BvhNode<T>>, mut items: Vec<(Rect, T)>) -> usize {
         let idx = nodes.len();
-        nodes.push(BvhNode { bounds: Rect::new(0.0, 0.0, 0.0, 0.0), left: None, right: None, data: None });
+        nodes.push(BvhNode {
+            bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
+            left: None,
+            right: None,
+            data: None,
+        });
         if items.len() == 1 {
             nodes[idx].bounds = items[0].0;
             nodes[idx].data = Some(items[0].1.clone());
@@ -281,8 +445,16 @@ impl<T: Clone> Bvh2D<T> {
         }
         let split_x = (max_x - min_x) > (max_y - min_y);
         items.sort_by(|a, b| {
-            let ca = if split_x { a.0.x + a.0.w * 0.5 } else { a.0.y + a.0.h * 0.5 };
-            let cb = if split_x { b.0.x + b.0.w * 0.5 } else { b.0.y + b.0.h * 0.5 };
+            let ca = if split_x {
+                a.0.x + a.0.w * 0.5
+            } else {
+                a.0.y + a.0.h * 0.5
+            };
+            let cb = if split_x {
+                b.0.x + b.0.w * 0.5
+            } else {
+                b.0.y + b.0.h * 0.5
+            };
             ca.partial_cmp(&cb).unwrap()
         });
         let mid = items.len() / 2;
@@ -300,10 +472,18 @@ impl<T: Clone> Bvh2D<T> {
 
     fn query_node<'a>(&'a self, idx: usize, rect: Rect, results: &mut Vec<&'a T>) {
         let node = &self.nodes[idx];
-        if !node.bounds.intersect(rect).is_some() { return; }
-        if let Some(data) = &node.data { results.push(data); }
-        if let Some(left) = node.left { self.query_node(left, rect, results); }
-        if let Some(right) = node.right { self.query_node(right, rect, results); }
+        if !node.bounds.intersect(rect).is_some() {
+            return;
+        }
+        if let Some(data) = &node.data {
+            results.push(data);
+        }
+        if let Some(left) = node.left {
+            self.query_node(left, rect, results);
+        }
+        if let Some(right) = node.right {
+            self.query_node(right, rect, results);
+        }
     }
 }
 
@@ -313,16 +493,24 @@ pub struct FastRand {
 }
 
 impl FastRand {
-    pub fn new(seed: u64) -> Self { Self { state: seed } }
+    pub fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
     pub fn next_u64(&mut self) -> u64 {
         self.state ^= self.state << 13;
         self.state ^= self.state >> 7;
         self.state ^= self.state << 17;
         self.state
     }
-    pub fn next_f32(&mut self) -> f32 { (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32 }
-    pub fn next_f32_range(&mut self, min: f32, max: f32) -> f32 { min + self.next_f32() * (max - min) }
-    pub fn next_i32_range(&mut self, min: i32, max: i32) -> i32 { min + (self.next_u64() as u32 % (max - min + 1) as u32) as i32 }
+    pub fn next_f32(&mut self) -> f32 {
+        (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32
+    }
+    pub fn next_f32_range(&mut self, min: f32, max: f32) -> f32 {
+        min + self.next_f32() * (max - min)
+    }
+    pub fn next_i32_range(&mut self, min: i32, max: i32) -> i32 {
+        min + (self.next_u64() as u32 % (max - min + 1) as u32) as i32
+    }
 }
 
 /// SIMD-accelerated image operations

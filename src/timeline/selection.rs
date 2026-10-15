@@ -1,6 +1,6 @@
 //! Selection management for timeline
 
-use crate::core::id::{TrackId, TrackItemId, MarkerId};
+use crate::core::id::{MarkerId, TrackId, TrackItemId};
 use crate::core::time::{Frame, FrameRange};
 use crate::timeline::clip::Timeline;
 use std::collections::HashSet;
@@ -16,7 +16,9 @@ pub struct Selection {
 }
 
 impl Selection {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty() && self.range.is_none() && self.markers.is_empty()
@@ -31,7 +33,9 @@ impl Selection {
     }
 
     pub fn select_item(&mut self, item_id: TrackItemId, add: bool) {
-        if !add { self.items.clear(); }
+        if !add {
+            self.items.clear();
+        }
         self.items.insert(item_id);
     }
 
@@ -40,7 +44,9 @@ impl Selection {
     }
 
     pub fn select_items(&mut self, item_ids: &[TrackItemId], add: bool) {
-        if !add { self.items.clear(); }
+        if !add {
+            self.items.clear();
+        }
         self.items.extend(item_ids.iter().copied());
     }
 
@@ -49,7 +55,9 @@ impl Selection {
     }
 
     pub fn select_track(&mut self, track_id: TrackId, add: bool) {
-        if !add { self.tracks.clear(); }
+        if !add {
+            self.tracks.clear();
+        }
         self.tracks.insert(track_id);
     }
 
@@ -79,7 +87,9 @@ impl Selection {
     }
 
     pub fn select_marker(&mut self, marker_id: MarkerId, add: bool) {
-        if !add { self.markers.clear(); }
+        if !add {
+            self.markers.clear();
+        }
         self.markers.insert(marker_id);
     }
 
@@ -110,7 +120,11 @@ impl Selection {
     /// Get all items within selection range
     pub fn items_in_range(&self, timeline: &Timeline) -> Vec<TrackItemId> {
         if let Some(range) = self.range {
-            timeline.items_in_range(range).into_iter().map(|i| i.id).collect()
+            timeline
+                .items_in_range(range)
+                .into_iter()
+                .map(|i| i.id)
+                .collect()
         } else {
             Vec::new()
         }
@@ -119,7 +133,11 @@ impl Selection {
     /// Select all items in range
     pub fn select_range(&mut self, timeline: &Timeline, range: FrameRange) {
         self.range = Some(range);
-        self.items = timeline.items_in_range(range).into_iter().map(|i| i.id).collect();
+        self.items = timeline
+            .items_in_range(range)
+            .into_iter()
+            .map(|i| i.id)
+            .collect();
     }
 }
 
@@ -133,11 +151,21 @@ pub struct SelectionModifiers {
 }
 
 impl SelectionModifiers {
-    pub fn add_to_selection(&self) -> bool { self.shift }
-    pub fn toggle_selection(&self) -> bool { self.ctrl }
-    pub fn range_select(&self) -> bool { self.shift }
-    pub fn duplicate(&self) -> bool { self.alt }
-    pub fn ripple(&self) -> bool { self.shift }
+    pub fn add_to_selection(&self) -> bool {
+        self.shift
+    }
+    pub fn toggle_selection(&self) -> bool {
+        self.ctrl
+    }
+    pub fn range_select(&self) -> bool {
+        self.shift
+    }
+    pub fn duplicate(&self) -> bool {
+        self.alt
+    }
+    pub fn ripple(&self) -> bool {
+        self.shift
+    }
 }
 
 /// Selection tool
@@ -178,16 +206,18 @@ impl SelectionTool {
         self.drag_start = Some(frame);
         self.drag_current = Some(frame);
         self.drag_track = Some(track);
-        
+
         if let Some(item_id) = item {
             if self.modifiers.toggle_selection() {
                 if self.selection.has_item(item_id) {
                     self.selection.deselect_item(item_id);
                 } else {
-                    self.selection.select_item(item_id, self.modifiers.add_to_selection());
+                    self.selection
+                        .select_item(item_id, self.modifiers.add_to_selection());
                 }
             } else if self.modifiers.range_select() {
-                self.selection.select_item(item_id, self.modifiers.add_to_selection());
+                self.selection
+                    .select_item(item_id, self.modifiers.add_to_selection());
             } else {
                 self.selection.select_item(item_id, false);
             }
@@ -196,11 +226,11 @@ impl SelectionTool {
 
     pub fn update_drag(&mut self, frame: Frame, track: TrackId) {
         self.drag_current = Some(frame);
-        
+
         if self.modifiers.range_select() && self.drag_start.is_some() {
             let start = self.drag_start.unwrap();
             let start_track = self.drag_track.unwrap();
-            
+
             self.marquee_rect = Some(MarqueeRect {
                 start_frame: start.min(frame),
                 end_frame: start.max(frame),
@@ -231,27 +261,30 @@ impl SelectionTool {
         } else {
             DragResult::None
         };
-        
+
         self.drag_start = None;
         self.drag_current = None;
         self.drag_track = None;
         self.marquee_rect = None;
-        
+
         result
     }
 
     fn select_marquee(&mut self, timeline: &Timeline, marquee: MarqueeRect) {
         let add = self.modifiers.add_to_selection();
-        if !add { self.selection.clear(); }
-        
+        if !add {
+            self.selection.clear();
+        }
+
         // Select tracks in range
         let track_ids = self.tracks_in_range(timeline, marquee.start_track, marquee.end_track);
         for track_id in &track_ids {
             self.selection.select_track(*track_id, true);
         }
-        
+
         // Select items in range
-        for item in timeline.items_in_range(FrameRange::new(marquee.start_frame, marquee.end_frame)) {
+        for item in timeline.items_in_range(FrameRange::new(marquee.start_frame, marquee.end_frame))
+        {
             if track_ids.contains(&item.track_id) {
                 self.selection.select_item(item.id, true);
             }
@@ -260,7 +293,7 @@ impl SelectionTool {
 
     fn tracks_in_range(&self, timeline: &Timeline, start: TrackId, end: TrackId) -> Vec<TrackId> {
         let mut tracks = Vec::new();
-        
+
         // Video tracks
         for track in &timeline.tracks.video_tracks {
             if track.id >= start && track.id <= end {
@@ -279,7 +312,7 @@ impl SelectionTool {
                 tracks.push(track.id);
             }
         }
-        
+
         tracks
     }
 
@@ -318,26 +351,42 @@ pub struct SelectionNavigation {
 }
 
 impl SelectionNavigation {
-    pub fn new() -> Self { Self { timeline: None } }
+    pub fn new() -> Self {
+        Self { timeline: None }
+    }
 
-    pub fn set_timeline(&mut self, timeline: Timeline) { self.timeline = Some(timeline); }
+    pub fn set_timeline(&mut self, timeline: Timeline) {
+        self.timeline = Some(timeline);
+    }
 
     pub fn select_next_item(&self, wrap: bool) -> Option<TrackItemId> {
         // Implementation would find next item after current selection
         None
     }
 
-    pub fn select_prev_item(&self, wrap: bool) -> Option<TrackItemId> { None }
+    pub fn select_prev_item(&self, wrap: bool) -> Option<TrackItemId> {
+        None
+    }
 
-    pub fn select_next_track(&self, track_type: crate::core::types::TrackType) -> Option<TrackId> { None }
+    pub fn select_next_track(&self, track_type: crate::core::types::TrackType) -> Option<TrackId> {
+        None
+    }
 
-    pub fn select_prev_track(&self, track_type: crate::core::types::TrackType) -> Option<TrackId> { None }
+    pub fn select_prev_track(&self, track_type: crate::core::types::TrackType) -> Option<TrackId> {
+        None
+    }
 
-    pub fn extend_selection_next(&self) -> Option<TrackItemId> { None }
+    pub fn extend_selection_next(&self) -> Option<TrackItemId> {
+        None
+    }
 
-    pub fn extend_selection_prev(&self) -> Option<TrackItemId> { None }
+    pub fn extend_selection_prev(&self) -> Option<TrackItemId> {
+        None
+    }
 
-    pub fn select_all_on_track(&self, track_id: TrackId) -> Vec<TrackItemId> { Vec::new() }
+    pub fn select_all_on_track(&self, track_id: TrackId) -> Vec<TrackItemId> {
+        Vec::new()
+    }
 
     pub fn deselect_all(&self) {}
 }

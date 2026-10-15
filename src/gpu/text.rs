@@ -5,9 +5,12 @@
 //! carries the vertex layout and the buffer needed to upload shaped glyph quads
 //! to the GPU.
 
-use wgpu::{Buffer, BufferUsages, Device, Queue, VertexAttribute, VertexBufferLayout, VertexFormat, VertexStepMode};
-use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
+use std::sync::Arc;
+use wgpu::{
+    Buffer, BufferUsages, Device, Queue, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexStepMode,
+};
 
 /// One glyph quad. Six vertices (two triangles), or four with an index buffer.
 #[repr(C)]
@@ -26,9 +29,21 @@ pub const TEXT_VERTEX_LAYOUT: VertexBufferLayout<'static> = VertexBufferLayout {
     array_stride: std::mem::size_of::<GlyphVertex>() as u64,
     step_mode: VertexStepMode::Vertex,
     attributes: &[
-        VertexAttribute { format: VertexFormat::Float32x2, offset: 0, shader_location: 0 },
-        VertexAttribute { format: VertexFormat::Float32x2, offset: 8, shader_location: 1 },
-        VertexAttribute { format: VertexFormat::Float32x4, offset: 16, shader_location: 2 },
+        VertexAttribute {
+            format: VertexFormat::Float32x2,
+            offset: 0,
+            shader_location: 0,
+        },
+        VertexAttribute {
+            format: VertexFormat::Float32x2,
+            offset: 8,
+            shader_location: 1,
+        },
+        VertexAttribute {
+            format: VertexFormat::Float32x4,
+            offset: 16,
+            shader_location: 2,
+        },
     ],
 };
 
@@ -128,13 +143,20 @@ mod tests {
     use super::*;
 
     fn v(x: f32, y: f32) -> GlyphVertex {
-        GlyphVertex { position: [x, y], uv: [0.0, 0.0], color: [1.0; 4] }
+        GlyphVertex {
+            position: [x, y],
+            uv: [0.0, 0.0],
+            color: [1.0; 4],
+        }
     }
 
     #[test]
     fn vertex_layout_matches_struct() {
         // The three attributes must exactly tile GlyphVertex with no padding.
-        assert_eq!(TEXT_VERTEX_LAYOUT.array_stride, std::mem::size_of::<GlyphVertex>() as u64);
+        assert_eq!(
+            TEXT_VERTEX_LAYOUT.array_stride,
+            std::mem::size_of::<GlyphVertex>() as u64
+        );
         assert_eq!(TEXT_VERTEX_LAYOUT.attributes.len(), 3);
 
         let mut covered = 0u64;

@@ -1,7 +1,7 @@
 //! Audio mixer - routing, automation, control surfaces
 
-use crate::audio::engine::{AudioEngine, AudioBuffer};
-use crate::core::id::{TrackId, AudioBusId};
+use crate::audio::engine::{AudioBuffer, AudioEngine};
+use crate::core::id::{AudioBusId, TrackId};
 use crate::core::time::Frame;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -140,7 +140,13 @@ struct AutomationLane {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AutomationMode { Read, Write, Touch, Latch, Off }
+enum AutomationMode {
+    Read,
+    Write,
+    Touch,
+    Latch,
+    Off,
+}
 
 #[derive(Debug, Clone)]
 struct AutomationPoint {
@@ -155,39 +161,54 @@ impl AudioMixer {
             engine,
             channel_strips: HashMap::new(),
             bus_strips: HashMap::new(),
-            master_strip: MasterStrip { volume: 1.0, mute: false, dim: false, mono: false, inserts: Vec::new(), meter: MeterState::default() },
-            automation: AutomationManager { lanes: HashMap::new() },
+            master_strip: MasterStrip {
+                volume: 1.0,
+                mute: false,
+                dim: false,
+                mono: false,
+                inserts: Vec::new(),
+                meter: MeterState::default(),
+            },
+            automation: AutomationManager {
+                lanes: HashMap::new(),
+            },
         }
     }
 
     pub fn add_channel(&mut self, track_id: TrackId, name: String) {
-        self.channel_strips.insert(track_id, ChannelStrip {
+        self.channel_strips.insert(
             track_id,
-            name,
-            volume: 1.0,
-            pan: 0.0,
-            mute: false,
-            solo: false,
-            input: "In 1-2".into(),
-            output: "Bus 1".into(),
-            eq: EQState::default(),
-            dynamics: DynamicsState::default(),
-            inserts: Vec::new(),
-            sends: Vec::new(),
-            meter: MeterState::default(),
-        });
+            ChannelStrip {
+                track_id,
+                name,
+                volume: 1.0,
+                pan: 0.0,
+                mute: false,
+                solo: false,
+                input: "In 1-2".into(),
+                output: "Bus 1".into(),
+                eq: EQState::default(),
+                dynamics: DynamicsState::default(),
+                inserts: Vec::new(),
+                sends: Vec::new(),
+                meter: MeterState::default(),
+            },
+        );
     }
 
     pub fn add_bus(&mut self, bus_id: AudioBusId, name: String) {
-        self.bus_strips.insert(bus_id, BusStrip {
+        self.bus_strips.insert(
             bus_id,
-            name,
-            volume: 1.0,
-            mute: false,
-            solo: false,
-            inserts: Vec::new(),
-            meter: MeterState::default(),
-        });
+            BusStrip {
+                bus_id,
+                name,
+                volume: 1.0,
+                mute: false,
+                solo: false,
+                inserts: Vec::new(),
+                meter: MeterState::default(),
+            },
+        );
     }
 
     pub fn set_volume(&mut self, track_id: TrackId, volume: f32) {
@@ -225,7 +246,15 @@ impl AudioMixer {
         }
     }
 
-    pub fn set_eq(&mut self, track_id: TrackId, band: usize, freq: f32, gain: f32, q: f32, filter_type: super::dsp::FilterType) {
+    pub fn set_eq(
+        &mut self,
+        track_id: TrackId,
+        band: usize,
+        freq: f32,
+        gain: f32,
+        q: f32,
+        filter_type: super::dsp::FilterType,
+    ) {
         if let Some(strip) = self.channel_strips.get_mut(&track_id) {
             if band < strip.eq.bands.len() {
                 strip.eq.bands[band] = EQBandState {
@@ -239,7 +268,16 @@ impl AudioMixer {
         }
     }
 
-    pub fn set_compressor(&mut self, track_id: TrackId, threshold: f32, ratio: f32, attack: f32, release: f32, knee: f32, makeup: f32) {
+    pub fn set_compressor(
+        &mut self,
+        track_id: TrackId,
+        threshold: f32,
+        ratio: f32,
+        attack: f32,
+        release: f32,
+        knee: f32,
+        makeup: f32,
+    ) {
         if let Some(strip) = self.channel_strips.get_mut(&track_id) {
             strip.dynamics.compressor = CompressorState {
                 enabled: true,
@@ -254,20 +292,26 @@ impl AudioMixer {
     }
 
     pub fn write_automation(&mut self, parameter: String, frame: Frame, value: f32) {
-        self.automation.lanes.entry(parameter).or_insert_with(|| AutomationLane {
-            parameter: String::new(),
-            points: Vec::new(),
-            mode: AutomationMode::Write,
-        }).points.push(AutomationPoint {
-            frame,
-            value,
-            interpolation: crate::core::types::Interpolation::Linear,
-        });
+        self.automation
+            .lanes
+            .entry(parameter)
+            .or_insert_with(|| AutomationLane {
+                parameter: String::new(),
+                points: Vec::new(),
+                mode: AutomationMode::Write,
+            })
+            .points
+            .push(AutomationPoint {
+                frame,
+                value,
+                interpolation: crate::core::types::Interpolation::Linear,
+            });
     }
 
     pub fn read_automation(&self, parameter: &str, frame: Frame) -> Option<f32> {
         self.automation.lanes.get(parameter).and_then(|lane| {
-            lane.points.iter()
+            lane.points
+                .iter()
                 .filter(|p| p.frame <= frame)
                 .max_by_key(|p| p.frame)
                 .map(|p| p.value)

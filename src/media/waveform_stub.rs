@@ -5,9 +5,9 @@
 //! always reports an error. The API mirrors `waveform.rs` so the rest of the
 //! crate compiles unchanged.
 
+use crate::core::error::{AppError, MediaError, Result};
 use crate::core::id::ClipId;
 use crate::core::time::Frame;
-use crate::core::error::{AppError, MediaError, Result};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -132,12 +132,18 @@ pub struct WaveformCache {
 
 impl WaveformCache {
     pub fn new(max_entries: usize) -> Self {
-        Self { max_entries, entries: Mutex::new(Vec::new()) }
+        Self {
+            max_entries,
+            entries: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn get(&self, clip_id: ClipId) -> Option<Waveform> {
         let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.iter().find(|(c, _)| *c == clip_id).map(|(_, w)| w.clone())
+        entries
+            .iter()
+            .find(|(c, _)| *c == clip_id)
+            .map(|(_, w)| w.clone())
     }
 
     pub fn put(&self, clip_id: ClipId, waveform: Waveform) {
@@ -150,7 +156,10 @@ impl WaveformCache {
     }
 
     pub fn clear(&self) {
-        self.entries.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.entries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     pub fn len(&self) -> usize {
@@ -171,13 +180,17 @@ mod tests {
             clip_id: ClipId(clip),
             sample_rate: 48_000,
             channels: 2,
-            peaks: (0..peaks).map(|i| WaveformPeak::new(-0.5, 0.25 + i as f32 * 0.01)).collect(),
+            peaks: (0..peaks)
+                .map(|i| WaveformPeak::new(-0.5, 0.25 + i as f32 * 0.01))
+                .collect(),
         }
     }
 
     #[test]
     fn generation_reports_missing_backend() {
-        assert!(WaveformGenerator::default().generate(Path::new("a.wav")).is_err());
+        assert!(WaveformGenerator::default()
+            .generate(Path::new("a.wav"))
+            .is_err());
     }
 
     #[test]

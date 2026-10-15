@@ -1,10 +1,10 @@
 //! Application configuration
 
+use crate::core::color::{ColorSpace, PixelFormat};
+use crate::core::types::{FrameRate, Resolution};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::core::types::{Resolution, FrameRate};
-use crate::core::color::{ColorSpace, PixelFormat};
 
 /// Main application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,15 +186,14 @@ impl Default for MediaConfig {
             max_concurrent_imports: 4,
             watch_folders: Vec::new(),
             supported_extensions: vec![
-                "mp4", "mov", "mxf", "avi", "mkv", "webm",
-                "prores", "dnxhd", "dnxhr", "r3d", "braw",
-                "wav", "aiff", "flac", "mp3", "aac", "ogg",
-                "jpg", "jpeg", "png", "tiff", "tif", "exr", "dpx", "cin", "hdr",
-                "srt", "ass", "vtt",
-            ].into_iter().map(String::from).collect(),
-            ignore_patterns: vec![
-                ".*".into(), "Thumbs.db".into(), ".DS_Store".into(),
-            ],
+                "mp4", "mov", "mxf", "avi", "mkv", "webm", "prores", "dnxhd", "dnxhr", "r3d",
+                "braw", "wav", "aiff", "flac", "mp3", "aac", "ogg", "jpg", "jpeg", "png", "tiff",
+                "tif", "exr", "dpx", "cin", "hdr", "srt", "ass", "vtt",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+            ignore_patterns: vec![".*".into(), "Thumbs.db".into(), ".DS_Store".into()],
         }
     }
 }
@@ -485,7 +484,9 @@ pub struct PathsConfig {
 
 impl Default for PathsConfig {
     fn default() -> Self {
-        let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("DaVinciClone");
+        let base = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("DaVinciClone");
         Self {
             projects_dir: Some(base.join("Projects")),
             exports_dir: Some(base.join("Exports")),
@@ -599,8 +600,12 @@ impl ConfigManager {
         Ok(path)
     }
 
-    pub fn get(&self) -> &AppConfig { &self.config }
-    pub fn get_mut(&mut self) -> &mut AppConfig { &mut self.config }
+    pub fn get(&self) -> &AppConfig {
+        &self.config
+    }
+    pub fn get_mut(&mut self) -> &mut AppConfig {
+        &mut self.config
+    }
 
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let data = toml::to_string_pretty(&self.config)?;
@@ -608,7 +613,9 @@ impl ConfigManager {
         Ok(())
     }
 
-    pub fn reset(&mut self) { self.config = AppConfig::default(); }
+    pub fn reset(&mut self) {
+        self.config = AppConfig::default();
+    }
 }
 
 fn migrate_config(mut config: AppConfig) -> AppConfig {

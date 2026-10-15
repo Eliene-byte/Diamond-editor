@@ -5,9 +5,9 @@
 //! report an error. That keeps `cargo check --no-default-features` and the
 //! headless CI matrix entries compiling and testable.
 
-use crate::core::types::{MediaType, ClipMetadata};
-use crate::core::time::Frame;
 use crate::core::error::{AppError, MediaError, Result};
+use crate::core::time::Frame;
+use crate::core::types::{ClipMetadata, MediaType};
 use crate::media::metadata::MediaMetadata;
 use crate::media::pool::MediaPool;
 use std::path::{Path, PathBuf};
@@ -85,7 +85,11 @@ pub struct MediaScanner {
 
 impl MediaScanner {
     pub fn new(supported_extensions: Vec<String>, watch_folders: Vec<PathBuf>) -> Result<Self> {
-        Ok(Self { supported_extensions, watch_folders, callback: None })
+        Ok(Self {
+            supported_extensions,
+            watch_folders,
+            callback: None,
+        })
     }
 
     pub fn set_callback<F>(&mut self, callback: F)
@@ -111,7 +115,11 @@ impl MediaScanner {
     pub fn is_supported(&self, path: &Path) -> bool {
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|ext| self.supported_extensions.iter().any(|e| e == &ext.to_lowercase()))
+            .map(|ext| {
+                self.supported_extensions
+                    .iter()
+                    .any(|e| e == &ext.to_lowercase())
+            })
             .unwrap_or(false)
     }
 
@@ -126,12 +134,15 @@ pub fn detect_media_type(path: &Path) -> Option<MediaType> {
     let ext = path.extension()?.to_str()?.to_lowercase();
     match ext.as_str() {
         // Video
-        "mp4" | "mov" | "mxf" | "avi" | "mkv" | "webm" | "flv" | "wmv" | "mpeg" | "mpg" | "m2ts" | "mts" | "ts" | "vob" |
-        "prores" | "dnxhd" | "dnxhr" | "r3d" | "braw" | "ari" | "gxf" => Some(MediaType::Video),
+        "mp4" | "mov" | "mxf" | "avi" | "mkv" | "webm" | "flv" | "wmv" | "mpeg" | "mpg"
+        | "m2ts" | "mts" | "ts" | "vob" | "prores" | "dnxhd" | "dnxhr" | "r3d" | "braw" | "ari"
+        | "gxf" => Some(MediaType::Video),
         // Audio
-        "wav" | "aiff" | "aif" | "flac" | "mp3" | "aac" | "ogg" | "opus" | "wma" | "m4a" | "caf" => Some(MediaType::Audio),
+        "wav" | "aiff" | "aif" | "flac" | "mp3" | "aac" | "ogg" | "opus" | "wma" | "m4a"
+        | "caf" => Some(MediaType::Audio),
         // Image
-        "jpg" | "jpeg" | "png" | "tiff" | "tif" | "exr" | "dpx" | "cin" | "hdr" | "bmp" | "tga" | "psd" | "svg" | "webp" | "jxl" | "avif" => Some(MediaType::Image),
+        "jpg" | "jpeg" | "png" | "tiff" | "tif" | "exr" | "dpx" | "cin" | "hdr" | "bmp" | "tga"
+        | "psd" | "svg" | "webp" | "jxl" | "avif" => Some(MediaType::Image),
         // Subtitle
         "srt" | "ass" | "ssa" | "vtt" | "sub" | "idx" | "ttml" | "xml" => Some(MediaType::Subtitle),
         _ => None,
@@ -215,10 +226,22 @@ mod tests {
 
     #[test]
     fn extension_detection_covers_each_kind() {
-        assert_eq!(detect_media_type(Path::new("a.MOV")), Some(MediaType::Video));
-        assert_eq!(detect_media_type(Path::new("a.wav")), Some(MediaType::Audio));
-        assert_eq!(detect_media_type(Path::new("a.exr")), Some(MediaType::Image));
-        assert_eq!(detect_media_type(Path::new("a.srt")), Some(MediaType::Subtitle));
+        assert_eq!(
+            detect_media_type(Path::new("a.MOV")),
+            Some(MediaType::Video)
+        );
+        assert_eq!(
+            detect_media_type(Path::new("a.wav")),
+            Some(MediaType::Audio)
+        );
+        assert_eq!(
+            detect_media_type(Path::new("a.exr")),
+            Some(MediaType::Image)
+        );
+        assert_eq!(
+            detect_media_type(Path::new("a.srt")),
+            Some(MediaType::Subtitle)
+        );
         assert_eq!(detect_media_type(Path::new("a.txt")), None);
         assert_eq!(detect_media_type(Path::new("noext")), None);
     }
@@ -231,8 +254,9 @@ mod tests {
     #[tokio::test]
     async fn import_reports_every_path_as_failed() {
         let scanner = MediaScanner::new(vec!["mov".into()], Vec::new()).unwrap();
-        let cache = crate::media::cache::MediaCache::new(crate::media::cache::CacheConfig::default())
-            .expect("in-memory cache");
+        let cache =
+            crate::media::cache::MediaCache::new(crate::media::cache::CacheConfig::default())
+                .expect("in-memory cache");
         let pool = MediaPool::new(crate::core::id::ProjectId::generate(), Arc::new(cache));
         let mut importer = BatchImporter::new(scanner, pool);
 

@@ -21,7 +21,10 @@ pub struct InputState {
 
 impl InputState {
     pub fn new() -> Self {
-        Self { cursor_visible: true, ..Default::default() }
+        Self {
+            cursor_visible: true,
+            ..Default::default()
+        }
     }
 
     /// Record a window event, updating continuous state and queueing discrete events.
@@ -71,10 +74,18 @@ impl InputState {
         self.pressed_keys.contains(&key)
     }
 
-    pub fn shift(&self) -> bool { self.modifiers.shift }
-    pub fn ctrl(&self) -> bool { self.modifiers.ctrl }
-    pub fn alt(&self) -> bool { self.modifiers.alt }
-    pub fn meta(&self) -> bool { self.modifiers.meta }
+    pub fn shift(&self) -> bool {
+        self.modifiers.shift
+    }
+    pub fn ctrl(&self) -> bool {
+        self.modifiers.ctrl
+    }
+    pub fn alt(&self) -> bool {
+        self.modifiers.alt
+    }
+    pub fn meta(&self) -> bool {
+        self.modifiers.meta
+    }
 
     /// Take ownership of queued discrete events, clearing the queue.
     pub fn drain_events(&mut self) -> Vec<InputEvent> {
@@ -111,7 +122,12 @@ pub struct DragState {
 
 impl DragState {
     pub fn begin(start: Point2, button: MouseButton) -> Self {
-        Self { start, current: start, button, started_moved: false }
+        Self {
+            start,
+            current: start,
+            button,
+            started_moved: false,
+        }
     }
 
     pub fn update(&mut self, pos: Point2, drag_threshold: f32) {
@@ -143,7 +159,12 @@ pub struct ClickDetector {
 
 impl Default for ClickDetector {
     fn default() -> Self {
-        Self { last_click_time: -1.0, last_click_pos: Point2::ZERO, threshold_ms: 400, threshold_px: 4.0 }
+        Self {
+            last_click_time: -1.0,
+            last_click_pos: Point2::ZERO,
+            threshold_ms: 400,
+            threshold_px: 4.0,
+        }
     }
 }
 
@@ -226,7 +247,10 @@ mod tests {
         assert_eq!(s.scroll_delta.1, 3.0);
 
         s.end_frame();
-        assert!(s.is_key_down(Key::A), "held key should persist across frames");
+        assert!(
+            s.is_key_down(Key::A),
+            "held key should persist across frames"
+        );
         assert_eq!(s.scroll_delta.1, 0.0, "scroll should not accumulate");
 
         s.handle_event(InputEvent::KeyUp(Key::A));

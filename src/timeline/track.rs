@@ -1,12 +1,14 @@
 //! Track management for timeline
 
-use crate::core::id::{TrackId, TrackItemId, ClipId, TransitionId};
-use crate::core::time::{Frame, FrameRange};
-use crate::core::types::{TrackType, MediaType, EffectParams, EffectType, EffectValue, Interpolation, Easing, Keyframe};
 use crate::core::error::{Result, TimelineError};
+use crate::core::id::{ClipId, TrackId, TrackItemId, TransitionId};
+use crate::core::time::{Frame, FrameRange};
+use crate::core::types::{
+    Easing, EffectParams, EffectType, EffectValue, Interpolation, Keyframe, MediaType, TrackType,
+};
 use crate::media::pool::PoolClip;
-use std::collections::BTreeMap;
 use slotmap::SlotMap;
+use std::collections::BTreeMap;
 
 slotmap::new_key_type! { pub struct TrackItemKey; }
 
@@ -16,17 +18,17 @@ pub struct TrackItem {
     pub id: TrackItemId,
     pub key: TrackItemKey,
     pub track_id: TrackId,
-    pub clip_id: Option<ClipId>, // None for generators
-    pub source_range: FrameRange, // Range in source media
+    pub clip_id: Option<ClipId>,    // None for generators
+    pub source_range: FrameRange,   // Range in source media
     pub timeline_range: FrameRange, // Range on timeline
-    pub track_index: u32, // Position within track
+    pub track_index: u32,           // Position within track
     pub enabled: bool,
     pub locked: bool,
     pub opacity: f32,
     pub blend_mode: BlendMode,
     pub volume: f32, // For audio
-    pub pan: f32, // For audio
-    pub speed: f32, // 1.0 = normal, -1.0 = reverse, 2.0 = 2x
+    pub pan: f32,    // For audio
+    pub speed: f32,  // 1.0 = normal, -1.0 = reverse, 2.0 = 2x
     pub effects: Vec<TrackItemEffect>,
     pub transitions: (Option<TransitionId>, Option<TransitionId>), // (in, out)
     pub color: TrackItemColor,
@@ -114,13 +116,25 @@ impl TrackItem {
         }
     }
 
-    pub fn timeline_in(&self) -> Frame { self.timeline_range.start }
-    pub fn timeline_out(&self) -> Frame { self.timeline_range.end }
-    pub fn timeline_duration(&self) -> Frame { self.timeline_range.length() }
-    
-    pub fn source_in(&self) -> Frame { self.source_range.start }
-    pub fn source_out(&self) -> Frame { self.source_range.end }
-    pub fn source_duration(&self) -> Frame { self.source_range.length() }
+    pub fn timeline_in(&self) -> Frame {
+        self.timeline_range.start
+    }
+    pub fn timeline_out(&self) -> Frame {
+        self.timeline_range.end
+    }
+    pub fn timeline_duration(&self) -> Frame {
+        self.timeline_range.length()
+    }
+
+    pub fn source_in(&self) -> Frame {
+        self.source_range.start
+    }
+    pub fn source_out(&self) -> Frame {
+        self.source_range.end
+    }
+    pub fn source_duration(&self) -> Frame {
+        self.source_range.length()
+    }
 
     pub fn set_timeline_in(&mut self, frame: Frame) {
         let duration = self.timeline_duration();
@@ -141,26 +155,42 @@ impl TrackItem {
 
     pub fn trim_in(&mut self, delta: Frame) {
         self.source_range = FrameRange::new(self.source_range.start + delta, self.source_range.end);
-        self.timeline_range = FrameRange::new(self.timeline_range.start + delta * self.speed_sign(), self.timeline_range.end);
+        self.timeline_range = FrameRange::new(
+            self.timeline_range.start + delta * self.speed_sign(),
+            self.timeline_range.end,
+        );
     }
 
     pub fn trim_out(&mut self, delta: Frame) {
         self.source_range = FrameRange::new(self.source_range.start, self.source_range.end + delta);
-        self.timeline_range = FrameRange::new(self.timeline_range.start, self.timeline_range.end + delta * self.speed_sign());
+        self.timeline_range = FrameRange::new(
+            self.timeline_range.start,
+            self.timeline_range.end + delta * self.speed_sign(),
+        );
     }
 
-    fn speed_sign(&self) -> i64 { if self.speed < 0.0 { -1 } else { 1 } }
+    fn speed_sign(&self) -> i64 {
+        if self.speed < 0.0 {
+            -1
+        } else {
+            1
+        }
+    }
 
     pub fn contains_frame(&self, frame: Frame) -> bool {
         self.timeline_range.contains(frame)
     }
 
     pub fn frame_at_timeline(&self, timeline_frame: Frame) -> Option<Frame> {
-        if !self.timeline_range.contains(timeline_frame) { return None; }
+        if !self.timeline_range.contains(timeline_frame) {
+            return None;
+        }
         let offset = timeline_frame - self.timeline_range.start;
         let source_offset = if self.speed != 0.0 {
             Frame((offset.0 as f32 / self.speed.abs()) as i64)
-        } else { Frame::ZERO };
+        } else {
+            Frame::ZERO
+        };
         if self.speed < 0.0 {
             Some(self.source_range.end - source_offset - Frame(1))
         } else {
@@ -182,7 +212,9 @@ impl TrackItem {
     pub fn remove_effect(&mut self, index: usize) -> Option<TrackItemEffect> {
         if index < self.effects.len() {
             Some(self.effects.remove(index))
-        } else { None }
+        } else {
+            None
+        }
     }
 
     fn default_params(effect_type: EffectType) -> std::collections::HashMap<String, EffectValue> {
@@ -280,12 +312,12 @@ impl VideoTrack {
 
     pub fn item_at_frame(&self, frame: Frame) -> Option<&TrackItemKey> {
         // Find item that contains this frame
-        self.items.range(..=frame).next_back()
-            .map(|(_, key)| key)
+        self.items.range(..=frame).next_back().map(|(_, key)| key)
     }
 
     pub fn items_in_range(&self, range: FrameRange) -> Vec<&TrackItemKey> {
-        self.items.range(range.start..range.end)
+        self.items
+            .range(range.start..range.end)
             .map(|(_, key)| key)
             .collect()
     }
@@ -396,14 +428,14 @@ impl TrackContainer {
             next_audio_index: 0,
             next_subtitle_index: 0,
         };
-        
+
         for i in 0..video_count {
             container.add_video_track(format!("V{}", i + 1));
         }
         for i in 0..audio_count {
             container.add_audio_track(format!("A{}", i + 1));
         }
-        
+
         container
     }
 
@@ -497,7 +529,7 @@ impl TrackContainer {
 
     pub fn total_height(&self) -> f32 {
         self.video_tracks.iter().map(|t| t.height).sum::<f32>()
-        + self.audio_tracks.iter().map(|t| t.height).sum::<f32>()
-        + self.subtitle_tracks.iter().map(|t| t.height).sum::<f32>()
+            + self.audio_tracks.iter().map(|t| t.height).sum::<f32>()
+            + self.subtitle_tracks.iter().map(|t| t.height).sum::<f32>()
     }
 }

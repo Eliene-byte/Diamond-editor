@@ -17,7 +17,11 @@ pub struct StreamConfig {
 
 impl StreamConfig {
     pub fn new(sample_rate: u32, channels: u16, buffer_size: u32) -> Self {
-        Self { sample_rate, channels, buffer_size }
+        Self {
+            sample_rate,
+            channels,
+            buffer_size,
+        }
     }
 
     /// Bytes per callback for interleaved `f32` samples.
@@ -53,7 +57,9 @@ impl Stream {
         #[cfg(feature = "audio-cpal")]
         {
             use cpal::traits::StreamTrait;
-            self.inner.play().map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+            self.inner
+                .play()
+                .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
         }
         *self.running.lock().unwrap_or_else(|e| e.into_inner()) = true;
         Ok(())
@@ -64,7 +70,9 @@ impl Stream {
         #[cfg(feature = "audio-cpal")]
         {
             use cpal::traits::StreamTrait;
-            self.inner.pause().map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+            self.inner
+                .pause()
+                .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
         }
         *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
         Ok(())
@@ -122,10 +130,16 @@ where
             )
             .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
 
-        stream.play().map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+        stream
+            .play()
+            .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
         *running.lock().unwrap_or_else(|e| e.into_inner()) = true;
 
-        return Ok(Stream { inner: stream, config, running });
+        return Ok(Stream {
+            inner: stream,
+            config,
+            running,
+        });
     }
 
     #[cfg(not(feature = "audio-cpal"))]

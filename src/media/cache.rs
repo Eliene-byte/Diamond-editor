@@ -1,18 +1,18 @@
 //! Media cache - frame, proxy, thumbnail, waveform caching
 
-use crate::core::id::{ClipId, CacheEntryId};
+use crate::core::error::{AppError, CacheError, Result};
+use crate::core::id::{CacheEntryId, ClipId};
 use crate::core::time::Frame;
 use crate::core::types::FrameRate;
-use crate::core::error::{AppError, CacheError, Result};
 use crate::media::decoder::VideoFrame;
+use crate::media::proxy::ProxyMetadata;
 use crate::media::thumbnail::Thumbnail;
 use crate::media::waveform::Waveform;
-use crate::media::proxy::ProxyMetadata;
+use lru::LruCache;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use lru::LruCache;
 
 /// Unified media cache with multiple tiers
 pub struct MediaCache {
@@ -20,10 +20,10 @@ pub struct MediaCache {
     frame_cache: RwLock<LruCache<FrameCacheKey, Arc<VideoFrame>>>,
     thumbnail_cache: RwLock<LruCache<ThumbnailCacheKey, Arc<Thumbnail>>>,
     waveform_cache: RwLock<LruCache<ClipId, Arc<Waveform>>>,
-    
+
     // Disk cache index
     disk_index: RwLock<DiskCacheIndex>,
-    
+
     // Configuration
     config: CacheConfig,
 }
@@ -100,10 +100,22 @@ struct DiskCacheEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum DiskCacheKey {
-    Frame { clip_id: ClipId, frame: Frame, quality: CacheQuality },
-    Thumbnail { clip_id: ClipId, frame: Frame, size: (u16, u16) },
-    Waveform { clip_id: ClipId },
-    Proxy { clip_id: ClipId },
+    Frame {
+        clip_id: ClipId,
+        frame: Frame,
+        quality: CacheQuality,
+    },
+    Thumbnail {
+        clip_id: ClipId,
+        frame: Frame,
+        size: (u16, u16),
+    },
+    Waveform {
+        clip_id: ClipId,
+    },
+    Proxy {
+        clip_id: ClipId,
+    },
 }
 
 impl MediaCache {
@@ -111,16 +123,16 @@ impl MediaCache {
         if config.enable_disk_cache {
             std::fs::create_dir_all(&config.disk_cache_dir)?;
         }
-        
+
         Ok(Self {
             frame_cache: RwLock::new(LruCache::new(
-                std::num::NonZeroUsize::new(config.max_memory_frames).unwrap()
+                std::num::NonZeroUsize::new(config.max_memory_frames).unwrap(),
             )),
             thumbnail_cache: RwLock::new(LruCache::new(
-                std::num::NonZeroUsize::new(config.max_memory_thumbnails).unwrap()
+                std::num::NonZeroUsize::new(config.max_memory_thumbnails).unwrap(),
             )),
             waveform_cache: RwLock::new(LruCache::new(
-                std::num::NonZeroUsize::new(config.max_memory_waveforms).unwrap()
+                std::num::NonZeroUsize::new(config.max_memory_waveforms).unwrap(),
             )),
             disk_index: RwLock::new(DiskCacheIndex::default()),
             config,
@@ -128,37 +140,83 @@ impl MediaCache {
     }
 
     // Frame cache
-    pub fn get_frame(&self, clip_id: ClipId, frame: Frame, quality: CacheQuality) -> Option<Arc<VideoFrame>> {
-        let key = FrameCacheKey { clip_id, frame, quality };
+    pub fn get_frame(
+        &self,
+        clip_id: ClipId,
+        frame: Frame,
+        quality: CacheQuality,
+    ) -> Option<Arc<VideoFrame>> {
+        let key = FrameCacheKey {
+            clip_id,
+            frame,
+            quality,
+        };
         self.frame_cache.write().get(&key).cloned()
     }
 
-    pub fn put_frame(&self, clip_id: ClipId, frame: Frame, quality: CacheQuality, video_frame: VideoFrame) {
-        let key = FrameCacheKey { clip_id, frame, quality };
+    pub fn put_frame(
+        &self,
+        clip_id: ClipId,
+        frame: Frame,
+        quality: CacheQuality,
+        video_frame: VideoFrame,
+    ) {
+        let key = FrameCacheKey {
+            clip_id,
+            frame,
+            quality,
+        };
         self.frame_cache.write().put(key, Arc::new(video_frame));
     }
 
     pub fn evict_frame(&self, clip_id: ClipId, frame: Frame) {
-        for quality in [CacheQuality::Full, CacheQuality::Proxy, CacheQuality::Thumbnail] {
-            let key = FrameCacheKey { clip_id, frame, quality };
+        for quality in [
+            CacheQuality::Full,
+            CacheQuality::Proxy,
+            CacheQuality::Thumbnail,
+        ] {
+            let key = FrameCacheKey {
+                clip_id,
+                frame,
+                quality,
+            };
             self.frame_cache.write().pop(&key);
         }
     }
 
     pub fn evict_clip_frames(&self, clip_id: ClipId) {
         let mut cache = self.frame_cache.write();
-        let keys: Vec<_> = cache.iter().filter(|(k, _)| k.clip_id == clip_id).map(|(k, _)| *k).collect();
-        for key in keys { cache.pop(&key); }
+        let keys: Vec<_> = cache
+            .iter()
+            .filter(|(k, _)| k.clip_id == clip_id)
+            .map(|(k, _)| *k)
+            .collect();
+        for key in keys {
+            cache.pop(&key);
+        }
     }
 
     // Thumbnail cache
-    pub fn get_thumbnail(&self, clip_id: ClipId, frame: Frame, size: (u16, u16)) -> Option<Arc<Thumbnail>> {
-        let key = ThumbnailCacheKey { clip_id, frame, size };
+    pub fn get_thumbnail(
+        &self,
+        clip_id: ClipId,
+        frame: Frame,
+        size: (u16, u16),
+    ) -> Option<Arc<Thumbnail>> {
+        let key = ThumbnailCacheKey {
+            clip_id,
+            frame,
+            size,
+        };
         self.thumbnail_cache.write().get(&key).cloned()
     }
 
     pub fn put_thumbnail(&self, clip_id: ClipId, frame: Frame, size: (u16, u16), thumb: Thumbnail) {
-        let key = ThumbnailCacheKey { clip_id, frame, size };
+        let key = ThumbnailCacheKey {
+            clip_id,
+            frame,
+            size,
+        };
         self.thumbnail_cache.write().put(key, Arc::new(thumb));
     }
 
@@ -173,21 +231,24 @@ impl MediaCache {
 
     // Disk cache
     pub fn cache_to_disk(&self, key: DiskCacheKey, data: &[u8]) -> Result<CacheEntryId> {
-        if !self.config.enable_disk_cache { return Err(AppError::Cache(CacheError::Disabled)); }
-        
+        if !self.config.enable_disk_cache {
+            return Err(AppError::Cache(CacheError::Disabled));
+        }
+
         let entry_id = CacheEntryId::generate();
         let filename = format!("{}.cache", entry_id.0);
         let path = self.config.disk_cache_dir.join(&filename);
-        
+
         // Compress if needed
         let compressed = match self.config.compression {
             CacheCompression::None => data.to_vec(),
             CacheCompression::Lz4 => lz4_flex::compress_prepend_size(data),
-            CacheCompression::Zstd => zstd::encode_all(data, 3).map_err(|e| AppError::Cache(CacheError::Compress(e.to_string())))?,
+            CacheCompression::Zstd => zstd::encode_all(data, 3)
+                .map_err(|e| AppError::Cache(CacheError::Compress(e.to_string())))?,
         };
-        
+
         std::fs::write(&path, &compressed)?;
-        
+
         let entry = DiskCacheEntry {
             id: entry_id,
             key: key.clone(),
@@ -197,33 +258,41 @@ impl MediaCache {
             last_access: chrono::Utc::now(),
             access_count: 0,
         };
-        
+
         let mut index = self.disk_index.write();
         index.entries.insert(entry_id, entry);
         index.total_size += compressed.len() as u64;
-        
+
         self.enforce_disk_limit(&mut index)?;
-        
+
         Ok(entry_id)
     }
 
     pub fn load_from_disk(&self, entry_id: CacheEntryId) -> Result<Vec<u8>> {
         let mut index = self.disk_index.write();
-        let entry = index.entries.get_mut(&entry_id)
-            .ok_or(AppError::Cache(CacheError::NotFound(format!("{}.cache", entry_id.0))))?;
-        
+        let entry =
+            index
+                .entries
+                .get_mut(&entry_id)
+                .ok_or(AppError::Cache(CacheError::NotFound(format!(
+                    "{}.cache",
+                    entry_id.0
+                ))))?;
+
         let data = std::fs::read(&entry.path)?;
-        
+
         entry.last_access = chrono::Utc::now();
         entry.access_count += 1;
-        
+
         // Decompress
         let decompressed = match self.config.compression {
             CacheCompression::None => data,
-            CacheCompression::Lz4 => lz4_flex::decompress_size_prepended(&data).map_err(|e| AppError::Cache(CacheError::Decompress(e.to_string())))?,
-            CacheCompression::Zstd => zstd::decode_all(&data[..]).map_err(|e| AppError::Cache(CacheError::Decompress(e.to_string())))?,
+            CacheCompression::Lz4 => lz4_flex::decompress_size_prepended(&data)
+                .map_err(|e| AppError::Cache(CacheError::Decompress(e.to_string())))?,
+            CacheCompression::Zstd => zstd::decode_all(&data[..])
+                .map_err(|e| AppError::Cache(CacheError::Decompress(e.to_string())))?,
         };
-        
+
         Ok(decompressed)
     }
 
@@ -238,12 +307,15 @@ impl MediaCache {
 
     fn enforce_disk_limit(&self, index: &mut DiskCacheIndex) -> Result<()> {
         let max_bytes = (self.config.max_disk_size_gb * 1024.0 * 1024.0 * 1024.0) as u64;
-        
+
         while index.total_size > max_bytes {
             // Remove least recently used
-            if let Some((_, entry)) = index.entries.iter()
+            if let Some((_, entry)) = index
+                .entries
+                .iter()
                 .min_by_key(|(_, e)| e.last_access)
-                .map(|(k, v)| (*k, v.clone())) {
+                .map(|(k, v)| (*k, v.clone()))
+            {
                 index.total_size = index.total_size.saturating_sub(entry.size);
                 index.entries.remove(&entry.id);
                 std::fs::remove_file(entry.path).ok();

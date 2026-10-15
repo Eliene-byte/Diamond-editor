@@ -1,10 +1,10 @@
 //! Audio engine - playback, routing, processing
 
-use crate::audio::dsp::{Compressor, Gate, Limiter, EQ, Analyzer, DelayLine, Biquad};
 use crate::audio::device::{open_output_stream, Stream, StreamConfig};
+use crate::audio::dsp::{Analyzer, Biquad, Compressor, DelayLine, Gate, Limiter, EQ};
 use crate::core::time::Frame;
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use crossbeam::channel::{Sender, Receiver, unbounded};
 
 pub struct AudioEngine {
     stream: Option<Stream>,
@@ -12,21 +12,21 @@ pub struct AudioEngine {
     sample_rate: u32,
     channels: usize,
     buffer_size: usize,
-    
+
     // Processing chain
     master_compressor: Compressor,
     master_limiter: Limiter,
     master_eq: EQ,
     analyzer: Analyzer,
-    
+
     // Audio buffers
     input_buffer: Arc<Mutex<Vec<f32>>>,
     output_buffer: Arc<Mutex<Vec<f32>>>,
-    
+
     // Playback
     playback_tx: Sender<AudioBuffer>,
     playback_rx: Receiver<AudioBuffer>,
-    
+
     // Routing
     tracks: Vec<AudioTrack>,
     buses: Vec<AudioBus>,
@@ -82,14 +82,18 @@ struct BusSend {
 }
 
 impl AudioEngine {
-    pub fn new(sample_rate: u32, channels: usize, buffer_size: usize) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(
+        sample_rate: u32,
+        channels: usize,
+        buffer_size: usize,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         // Defaults are filled in by `start()`, which probes the real device when
         // a backend is compiled in. Keeping a placeholder here means constructing
         // an engine never fails on a machine with no sound card (CI, containers).
         let config = StreamConfig::new(sample_rate, channels as u16, buffer_size as u32);
 
         let (playback_tx, playback_rx) = unbounded();
-        
+
         Ok(Self {
             stream: None,
             config,
@@ -106,7 +110,15 @@ impl AudioEngine {
             playback_rx,
             tracks: Vec::new(),
             buses: Vec::new(),
-            master_bus: AudioBus { id: 0, name: "Master".into(), volume: 1.0, channels, input_buffer: vec![0.0; buffer_size * channels], output_buffer: vec![0.0; buffer_size * channels], sends: Vec::new() },
+            master_bus: AudioBus {
+                id: 0,
+                name: "Master".into(),
+                volume: 1.0,
+                channels,
+                input_buffer: vec![0.0; buffer_size * channels],
+                output_buffer: vec![0.0; buffer_size * channels],
+                sends: Vec::new(),
+            },
         })
     }
 
@@ -135,10 +147,10 @@ impl AudioEngine {
             let len = input.len().min(buf.len());
             buf[..len].copy_from_slice(&input[..len]);
         }
-        
+
         // Process audio
         self.process_audio();
-        
+
         // Copy to output
         if let Ok(buf) = self.output_buffer.lock() {
             let len = output.len().min(buf.len());
@@ -152,14 +164,16 @@ impl AudioEngine {
             let buf = self.input_buffer.lock().unwrap();
             buf.clone()
         };
-        
+
         // Mix tracks to buses
         for track in &mut self.tracks {
-            if track.mute { continue; }
-            
+            if track.mute {
+                continue;
+            }
+
             // Process track effects
             let mut track_output = track.input_buffer.clone();
-            
+
             for effect in &mut track.effects {
                 match effect {
                     AudioEffect::EQ(eq) => {
@@ -189,23 +203,26 @@ impl AudioEngine {
                     }
                 }
             }
-            
+
             // Apply volume and pan
             for (i, sample) in track_output.iter_mut().enumerate() {
                 *sample *= track.volume;
                 if self.channels >= 2 {
                     let ch = i % 2;
-                    if ch == 0 { *sample *= (1.0 - track.pan).max(0.0); }
-                    else { *sample *= (1.0 + track.pan).max(0.0); }
+                    if ch == 0 {
+                        *sample *= (1.0 - track.pan).max(0.0);
+                    } else {
+                        *sample *= (1.0 + track.pan).max(0.0);
+                    }
                 }
             }
-            
+
             track.output_buffer = track_output;
         }
-        
+
         // Mix to master bus
         let mut master_input = vec![0.0; self.master_bus.input_buffer.len()];
-        
+
         for track in &self.tracks {
             if track.solo || !self.tracks.iter().any(|t| t.solo) {
                 for (i, sample) in track.output_buffer.iter().enumerate() {
@@ -215,22 +232,22 @@ impl AudioEngine {
                 }
             }
         }
-        
+
         // Master processing
         for (i, sample) in master_input.iter_mut().enumerate() {
             *sample = self.master_eq.process(*sample, i % self.channels);
             *sample = self.master_compressor.process(*sample, i % self.channels);
             *sample = self.master_limiter.process(*sample);
-            
+
             // Analyze
             let (rms, peak, peak_hold) = self.analyzer.process(*sample);
         }
-        
+
         // Apply master volume
         for sample in &mut master_input {
             *sample *= self.master_bus.volume;
         }
-        
+
         // Copy to output buffer
         if let Ok(mut buf) = self.output_buffer.lock() {
             let len = master_input.len().min(buf.len());

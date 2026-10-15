@@ -1,7 +1,7 @@
 //! Timeline markers - chapters, notes, sync points, etc.
 
 use crate::core::id::MarkerId;
-use crate::core::time::{Frame, FrameRange, Timecode, FrameRate};
+use crate::core::time::{Frame, FrameRange, FrameRate, Timecode};
 use crate::core::types::{ColorLabel, MarkerType};
 use std::collections::BTreeMap;
 
@@ -37,13 +37,16 @@ impl MarkerManager {
         if marker.id.0 == 0 {
             marker.id = MarkerId::generate();
         }
-        
+
         if marker.marker_type == MarkerType::Chapter && marker.chapter_number.is_none() {
             marker.chapter_number = Some(self.next_chapter);
             self.next_chapter += 1;
         }
-        
-        self.markers.entry(marker.position).or_default().push(marker.clone());
+
+        self.markers
+            .entry(marker.position)
+            .or_default()
+            .push(marker.clone());
         self.by_id.insert(marker.id, marker.clone());
         marker.id
     }
@@ -56,12 +59,12 @@ impl MarkerManager {
                     self.markers.remove(&marker.position);
                 }
             }
-            
+
             // Renumber chapters
             if marker.marker_type == MarkerType::Chapter {
                 self.renumber_chapters();
             }
-            
+
             Some(marker)
         } else {
             None
@@ -77,11 +80,15 @@ impl MarkerManager {
     }
 
     pub fn at_frame(&self, frame: Frame) -> Vec<&Marker> {
-        self.markers.get(&frame).map(|v| v.iter().collect()).unwrap_or_default()
+        self.markers
+            .get(&frame)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
     }
 
     pub fn in_range(&self, range: FrameRange) -> Vec<&Marker> {
-        self.markers.range(range.start..range.end)
+        self.markers
+            .range(range.start..range.end)
             .flat_map(|(_, v)| v.iter())
             .collect()
     }
@@ -91,33 +98,38 @@ impl MarkerManager {
     }
 
     pub fn next_marker(&self, frame: Frame) -> Option<&Marker> {
-        self.markers.range((frame + Frame(1))..)
+        self.markers
+            .range((frame + Frame(1))..)
             .next()
             .and_then(|(_, v)| v.first())
     }
 
     pub fn prev_marker(&self, frame: Frame) -> Option<&Marker> {
-        self.markers.range(..frame)
+        self.markers
+            .range(..frame)
             .next_back()
             .and_then(|(_, v)| v.last())
     }
 
     pub fn next_chapter(&self, frame: Frame) -> Option<&Marker> {
-        self.markers.range((frame + Frame(1))..)
+        self.markers
+            .range((frame + Frame(1))..)
             .find_map(|(_, v)| v.iter().find(|m| m.marker_type == MarkerType::Chapter))
     }
 
     pub fn prev_chapter(&self, frame: Frame) -> Option<&Marker> {
-        self.markers.range(..frame)
-            .next_back()
-            .and_then(|(_, v)| v.iter().rev().find(|m| m.marker_type == MarkerType::Chapter))
+        self.markers.range(..frame).next_back().and_then(|(_, v)| {
+            v.iter()
+                .rev()
+                .find(|m| m.marker_type == MarkerType::Chapter)
+        })
     }
 
     pub fn update(&mut self, marker_id: MarkerId, f: impl FnOnce(&mut Marker)) -> bool {
         if let Some(marker) = self.by_id.get_mut(&marker_id) {
             let old_position = marker.position;
             f(marker);
-            
+
             if marker.position != old_position {
                 // Move to new position
                 if let Some(vec) = self.markers.get_mut(&old_position) {
@@ -126,13 +138,16 @@ impl MarkerManager {
                         self.markers.remove(&old_position);
                     }
                 }
-                self.markers.entry(marker.position).or_default().push(marker.clone());
+                self.markers
+                    .entry(marker.position)
+                    .or_default()
+                    .push(marker.clone());
             }
-            
+
             if marker.marker_type == MarkerType::Chapter {
                 self.renumber_chapters();
             }
-            
+
             true
         } else {
             false
@@ -151,7 +166,9 @@ impl MarkerManager {
                 self.renumber_chapters();
             }
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     fn renumber_chapters(&mut self) {
@@ -170,10 +187,13 @@ impl MarkerManager {
         self.next_chapter = 1;
     }
 
-    pub fn count(&self) -> usize { self.by_id.len() }
+    pub fn count(&self) -> usize {
+        self.by_id.len()
+    }
 
     pub fn export_chapters(&self) -> Vec<ChapterExport> {
-        self.by_id.values()
+        self.by_id
+            .values()
             .filter(|m| m.marker_type == MarkerType::Chapter)
             .map(|m| ChapterExport {
                 number: m.chapter_number.unwrap_or(0),
@@ -218,7 +238,9 @@ impl Default for MarkerUI {
 
 impl MarkerUI {
     pub fn filter(&self, marker: &Marker) -> bool {
-        if !self.show_markers { return false; }
+        if !self.show_markers {
+            return false;
+        }
         let type_visible = match marker.marker_type {
             MarkerType::Chapter => self.show_chapters,
             MarkerType::Note => self.show_notes,

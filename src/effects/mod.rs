@@ -1,19 +1,19 @@
 //! Video and audio effects
 
-pub mod video;
 pub mod audio;
-pub mod transitions;
 pub mod generators;
+pub mod transitions;
+pub mod video;
 
 // Explicit re-exports. `Transition`/`TransitionType` are canonical in
 // `timeline::transitions` and re-exported through `transitions` here for
 // convenience; they are listed once to avoid glob ambiguity.
 
-pub use video::{VideoEffect, EffectStack, VideoEffectRenderer};
 pub use audio::{AudioEffect, AudioEffectChain};
-pub use generators::{Generator, GeneratorType, GeneratorRegistry};
+pub use generators::{Generator, GeneratorRegistry, GeneratorType};
 pub use transitions::{
-    TransitionType, Transition, default_transition_duration, min_transition_duration,
-    max_transition_duration, clamp_transition_duration, is_audio_transition,
-    is_video_transition, transition_label, make_transition, TRANSITION_PALETTE,
+    clamp_transition_duration, default_transition_duration, is_audio_transition,
+    is_video_transition, make_transition, max_transition_duration, min_transition_duration,
+    transition_label, Transition, TransitionType, TRANSITION_PALETTE,
 };
+pub use video::{EffectStack, VideoEffect, VideoEffectRenderer};

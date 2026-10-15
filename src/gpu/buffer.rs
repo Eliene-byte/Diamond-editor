@@ -1,10 +1,10 @@
 //! GPU buffer management
 
-use wgpu::{Device, Queue, Buffer, BufferDescriptor, BufferUsages, BufferAddress, BufferSize};
+use wgpu::{Buffer, BufferAddress, BufferDescriptor, BufferSize, BufferUsages, Device, Queue};
 // `create_buffer_init` is provided by this extension trait; it must be in scope.
-use wgpu::util::DeviceExt;
-use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
+use std::sync::Arc;
+use wgpu::util::DeviceExt;
 
 /// Typed GPU buffer. Cloning is cheap: the underlying wgpu buffer is shared.
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ impl<T: Pod> GpuBuffer<T> {
             usage,
             mapped_at_creation: false,
         });
-        
+
         Self {
             buffer: Arc::new(buffer),
             size: count,
@@ -30,13 +30,18 @@ impl<T: Pod> GpuBuffer<T> {
         }
     }
 
-    pub fn from_data(device: &Device, data: &[T], usage: BufferUsages, label: Option<&str>) -> Self {
+    pub fn from_data(
+        device: &Device,
+        data: &[T],
+        usage: BufferUsages,
+        label: Option<&str>,
+    ) -> Self {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label,
             contents: bytemuck::cast_slice(data),
             usage,
         });
-        
+
         Self {
             buffer: Arc::new(buffer),
             size: data.len(),
@@ -45,12 +50,16 @@ impl<T: Pod> GpuBuffer<T> {
     }
 
     pub fn write(&self, queue: &Queue, offset: usize, data: &[T]) {
-        queue.write_buffer(&self.buffer, (offset * std::mem::size_of::<T>()) as BufferAddress, bytemuck::cast_slice(data));
+        queue.write_buffer(
+            &self.buffer,
+            (offset * std::mem::size_of::<T>()) as BufferAddress,
+            bytemuck::cast_slice(data),
+        );
     }
 
     pub fn read(&self, queue: &Queue, offset: usize, count: usize) -> Vec<T> {
         let mut staging = self.buffer.clone(); // Would need actual staging buffer
-        // Simplified - real implementation needs staging buffer
+                                               // Simplified - real implementation needs staging buffer
         vec![T::zeroed(); count]
     }
 
@@ -66,9 +75,15 @@ impl<T: Pod> GpuBuffer<T> {
         }
     }
 
-    pub fn len(&self) -> usize { self.size }
-    pub fn is_empty(&self) -> bool { self.size == 0 }
-    pub fn buffer(&self) -> &Arc<Buffer> { &self.buffer }
+    pub fn len(&self) -> usize {
+        self.size
+    }
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
+    pub fn buffer(&self) -> &Arc<Buffer> {
+        &self.buffer
+    }
 }
 
 /// Uniform buffer for shaders
@@ -81,7 +96,7 @@ impl UniformBuffer {
             contents: bytemuck::bytes_of(data),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-        
+
         Self {
             buffer: Arc::new(buffer),
             size: std::mem::size_of::<T>(),
@@ -117,7 +132,8 @@ impl BufferManager {
 
     pub fn create_uniform<T: Pod>(&mut self, name: &str, data: &T) -> UniformBuffer {
         let buffer = UniformBuffer::new_uniform(&self.device, data, Some(name));
-        self.uniform_buffers.insert(name.to_string(), buffer.clone());
+        self.uniform_buffers
+            .insert(name.to_string(), buffer.clone());
         buffer
     }
 
@@ -129,29 +145,51 @@ impl BufferManager {
         if let Some(buf) = self.uniform_buffers.get(name) {
             buf.update(&self.queue, data);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn create_storage<T: Pod>(&mut self, name: &str, count: usize) -> StorageBuffer<T> {
-        let buffer = StorageBuffer::new(&self.device, count, BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC, Some(name));
+        let buffer = StorageBuffer::new(
+            &self.device,
+            count,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            Some(name),
+        );
         self.buffers.insert(name.to_string(), buffer.buffer.clone());
         buffer
     }
 
     pub fn create_vertex<T: Pod>(&mut self, name: &str, data: &[T]) -> StorageBuffer<T> {
-        let buffer = StorageBuffer::from_data(&self.device, data, BufferUsages::VERTEX | BufferUsages::COPY_DST, Some(name));
+        let buffer = StorageBuffer::from_data(
+            &self.device,
+            data,
+            BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            Some(name),
+        );
         self.buffers.insert(name.to_string(), buffer.buffer.clone());
         buffer
     }
 
     pub fn create_index(&mut self, name: &str, data: &[u32]) -> StorageBuffer<u32> {
-        let buffer = StorageBuffer::from_data(&self.device, data, BufferUsages::INDEX | BufferUsages::COPY_DST, Some(name));
+        let buffer = StorageBuffer::from_data(
+            &self.device,
+            data,
+            BufferUsages::INDEX | BufferUsages::COPY_DST,
+            Some(name),
+        );
         self.buffers.insert(name.to_string(), buffer.buffer.clone());
         buffer
     }
 
     pub fn create_indirect(&mut self, name: &str, count: usize) -> StorageBuffer<u32> {
-        let buffer = StorageBuffer::new(&self.device, count, BufferUsages::INDIRECT | BufferUsages::COPY_DST, Some(name));
+        let buffer = StorageBuffer::new(
+            &self.device,
+            count,
+            BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            Some(name),
+        );
         self.buffers.insert(name.to_string(), buffer.buffer.clone());
         buffer
     }

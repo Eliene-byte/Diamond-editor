@@ -432,7 +432,9 @@ pub trait ErrorContext<T> {
     fn with_context<C: fmt::Display, F: FnOnce() -> C>(self, f: F) -> Result<T>;
 }
 
-impl<T, E: std::error::Error + Send + Sync + 'static> ErrorContext<T> for std::result::Result<T, E> {
+impl<T, E: std::error::Error + Send + Sync + 'static> ErrorContext<T>
+    for std::result::Result<T, E>
+{
     fn context<C: fmt::Display>(self, msg: C) -> Result<T> {
         self.map_err(|e| AppError::Internal(format!("{}: {}", msg, e)))
     }

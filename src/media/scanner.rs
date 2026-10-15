@@ -1,15 +1,18 @@
 //! Media file scanning and discovery
 
-use crate::core::types::{MediaType, Resolution, FrameRate, PixelFormat, ColorSpace, ClipMetadata, ClipTags, ClipFlags, ColorLabel, Thumbnail};
+use crate::core::error::{MediaError, Result};
 use crate::core::id::{ClipId, MediaId};
 use crate::core::time::Frame;
-use crate::core::error::{Result, MediaError};
+use crate::core::types::{
+    ClipFlags, ClipMetadata, ClipTags, ColorLabel, ColorSpace, FrameRate, MediaType, PixelFormat,
+    Resolution, Thumbnail,
+};
 use crate::media::metadata::MediaMetadata;
-use std::path::{Path, PathBuf};
-use std::collections::HashSet;
-use walkdir::WalkDir;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event, EventKind};
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 /// Media scanner for discovering and importing media files
 pub struct MediaScanner {
@@ -22,12 +25,25 @@ pub struct MediaScanner {
 
 #[derive(Debug, Clone)]
 pub enum ScanEvent {
-    FileFound { path: PathBuf, metadata: MediaMetadata },
-    FileRemoved { path: PathBuf },
-    FileChanged { path: PathBuf, metadata: MediaMetadata },
+    FileFound {
+        path: PathBuf,
+        metadata: MediaMetadata,
+    },
+    FileRemoved {
+        path: PathBuf,
+    },
+    FileChanged {
+        path: PathBuf,
+        metadata: MediaMetadata,
+    },
     ScanStarted,
-    ScanCompleted { files_found: usize },
-    ScanError { path: PathBuf, error: String },
+    ScanCompleted {
+        files_found: usize,
+    },
+    ScanError {
+        path: PathBuf,
+        error: String,
+    },
 }
 
 impl MediaScanner {
@@ -38,7 +54,8 @@ impl MediaScanner {
         ignore_builder.add_line(None, ".DS_Store")?;
         let ignore = ignore_builder.build()?;
 
-        let extensions: HashSet<String> = supported_extensions.into_iter()
+        let extensions: HashSet<String> = supported_extensions
+            .into_iter()
             .map(|e| e.to_lowercase())
             .collect();
 
@@ -64,31 +81,54 @@ impl MediaScanner {
 
         for folder in &self.watch_folders.clone() {
             if let Err(e) = self.scan_folder(folder, &mut results) {
-                self.emit(ScanEvent::ScanError { path: folder.clone(), error: e.to_string() });
+                self.emit(ScanEvent::ScanError {
+                    path: folder.clone(),
+                    error: e.to_string(),
+                });
             }
         }
 
-        self.emit(ScanEvent::ScanCompleted { files_found: results.len() });
+        self.emit(ScanEvent::ScanCompleted {
+            files_found: results.len(),
+        });
         Ok(results)
     }
 
     fn scan_folder(&self, folder: &Path, results: &mut Vec<MediaMetadata>) -> Result<()> {
-        for entry in WalkDir::new(folder).follow_links(true).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(folder)
+            .follow_links(true)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             let path = entry.path();
-            if !path.is_file() { continue; }
-            if self.ignore.matched(path, path.is_dir()).is_ignore() { continue; }
+            if !path.is_file() {
+                continue;
+            }
+            if self.ignore.matched(path, path.is_dir()).is_ignore() {
+                continue;
+            }
 
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if !self.supported_extensions.contains(&ext.to_lowercase()) { continue; }
-            } else { continue; }
+                if !self.supported_extensions.contains(&ext.to_lowercase()) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
 
             match self.extract_metadata(path) {
                 Ok(metadata) => {
                     results.push(metadata.clone());
-                    self.emit(ScanEvent::FileFound { path: path.to_path_buf(), metadata });
+                    self.emit(ScanEvent::FileFound {
+                        path: path.to_path_buf(),
+                        metadata,
+                    });
                 }
                 Err(e) => {
-                    self.emit(ScanEvent::ScanError { path: path.to_path_buf(), error: e.to_string() });
+                    self.emit(ScanEvent::ScanError {
+                        path: path.to_path_buf(),
+                        error: e.to_string(),
+                    });
                 }
             }
         }
@@ -142,12 +182,15 @@ pub fn detect_media_type(path: &Path) -> Option<MediaType> {
     let ext = path.extension()?.to_str()?.to_lowercase();
     match ext.as_str() {
         // Video
-        "mp4" | "mov" | "mxf" | "avi" | "mkv" | "webm" | "flv" | "wmv" | "mpeg" | "mpg" | "m2ts" | "mts" | "ts" | "vob" |
-        "prores" | "dnxhd" | "dnxhr" | "r3d" | "braw" | "ari" | "mxf" | "gxf" => Some(MediaType::Video),
+        "mp4" | "mov" | "mxf" | "avi" | "mkv" | "webm" | "flv" | "wmv" | "mpeg" | "mpg"
+        | "m2ts" | "mts" | "ts" | "vob" | "prores" | "dnxhd" | "dnxhr" | "r3d" | "braw" | "ari"
+        | "mxf" | "gxf" => Some(MediaType::Video),
         // Audio
-        "wav" | "aiff" | "aif" | "flac" | "mp3" | "aac" | "ogg" | "opus" | "wma" | "m4a" | "caf" => Some(MediaType::Audio),
+        "wav" | "aiff" | "aif" | "flac" | "mp3" | "aac" | "ogg" | "opus" | "wma" | "m4a"
+        | "caf" => Some(MediaType::Audio),
         // Image
-        "jpg" | "jpeg" | "png" | "tiff" | "tif" | "exr" | "dpx" | "cin" | "hdr" | "bmp" | "tga" | "psd" | "svg" | "webp" | "jxl" | "avif" => Some(MediaType::Image),
+        "jpg" | "jpeg" | "png" | "tiff" | "tif" | "exr" | "dpx" | "cin" | "hdr" | "bmp" | "tga"
+        | "psd" | "svg" | "webp" | "jxl" | "avif" => Some(MediaType::Image),
         // Subtitle
         "srt" | "ass" | "ssa" | "vtt" | "sub" | "idx" | "ttml" | "xml" => Some(MediaType::Subtitle),
         _ => None,
@@ -157,12 +200,11 @@ pub fn detect_media_type(path: &Path) -> Option<MediaType> {
 /// Quick probe for basic file info without full decode
 pub fn quick_probe(path: &Path) -> Result<QuickProbeInfo> {
     use ffmpeg_next as ffmpeg;
-    
+
     ffmpeg::init()?;
-    
-    let mut ictx = ffmpeg::format::input(&path)
-        .map_err(|e| MediaError::Decoder(e.to_string()))?;
-    
+
+    let mut ictx = ffmpeg::format::input(&path).map_err(|e| MediaError::Decoder(e.to_string()))?;
+
     let mut info = QuickProbeInfo {
         path: path.to_path_buf(),
         duration: None,
@@ -197,11 +239,15 @@ pub fn quick_probe(path: &Path) -> Result<QuickProbeInfo> {
                     height,
                     frame_rate: if frame_rate.0 > 0 && frame_rate.1 > 0 {
                         Some(frame_rate.0 as f32 / frame_rate.1 as f32)
-                    } else { None },
-                    duration: duration.map(|d| Frame::from_seconds(
-                        d as f64 * time_base.0 as f64 / time_base.1 as f64,
-                        FrameRate::Fps24
-                    )),
+                    } else {
+                        None
+                    },
+                    duration: duration.map(|d| {
+                        Frame::from_seconds(
+                            d as f64 * time_base.0 as f64 / time_base.1 as f64,
+                            FrameRate::Fps24,
+                        )
+                    }),
                     pixel_format: pix_fmt,
                     color_space: format!("{:?}", color_space),
                     color_range: format!("{:?}", color_range),
@@ -223,10 +269,12 @@ pub fn quick_probe(path: &Path) -> Result<QuickProbeInfo> {
                     channels,
                     channel_layout,
                     sample_format: sample_fmt,
-                    duration: duration.map(|d| Frame::from_seconds(
-                        d as f64 * time_base.0 as f64 / time_base.1 as f64,
-                        FrameRate::Fps24
-                    )),
+                    duration: duration.map(|d| {
+                        Frame::from_seconds(
+                            d as f64 * time_base.0 as f64 / time_base.1 as f64,
+                            FrameRate::Fps24,
+                        )
+                    }),
                     bit_rate: codec.bit_rate(),
                 });
             }
@@ -245,7 +293,7 @@ pub fn quick_probe(path: &Path) -> Result<QuickProbeInfo> {
     if let Some(dur) = ictx.duration() {
         info.duration = Some(Frame::from_seconds(
             dur as f64 / ffi::AV_TIME_BASE as f64,
-            FrameRate::Fps24
+            FrameRate::Fps24,
         ));
     }
 
@@ -310,7 +358,7 @@ impl BatchImporter {
 
     pub async fn import_files(&mut self, paths: Vec<PathBuf>) -> ImportResult {
         let mut result = ImportResult::default();
-        
+
         for path in paths {
             match self.import_single(&path).await {
                 Ok(clip_id) => {
@@ -318,12 +366,15 @@ impl BatchImporter {
                     result.success_count += 1;
                 }
                 Err(e) => {
-                    result.failed.push(ImportFailure { path: path.clone(), error: e.to_string() });
+                    result.failed.push(ImportFailure {
+                        path: path.clone(),
+                        error: e.to_string(),
+                    });
                     result.failure_count += 1;
                 }
             }
         }
-        
+
         result
     }
 

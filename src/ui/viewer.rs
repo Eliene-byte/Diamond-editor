@@ -1,12 +1,12 @@
 //! Viewer widget - source, timeline, color, fusion, fairlight, deliver viewers
-use crate::core::math::{Rect, Point2};
+use crate::core::math::{Point2, Rect};
 
-use crate::ui::widgets::*;
+use crate::core::time::{Frame, FrameRate, Timecode};
+use crate::gpu::texture::GpuTexture;
+use crate::timeline::clip::Timeline;
 use crate::ui::layout::*;
 use crate::ui::theme::Theme;
-use crate::timeline::clip::Timeline;
-use crate::core::time::{Frame, Timecode, FrameRate};
-use crate::gpu::texture::GpuTexture;
+use crate::ui::widgets::*;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,54 +101,72 @@ impl ViewerWidget {
             let safe_h = rect.h * 0.9;
             let safe_x = rect.x + (rect.w - safe_w) * 0.5;
             let safe_y = rect.y + (rect.h - safe_h) * 0.5;
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [1.0, 1.0, 1.0, 0.3],
-                rect: [safe_x, safe_y, safe_w, 1.0],
-            });
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [1.0, 1.0, 1.0, 0.3],
-                rect: [safe_x, safe_y + safe_h - 1.0, safe_w, 1.0],
-            });
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [1.0, 1.0, 1.0, 0.3],
-                rect: [safe_x, safe_y, 1.0, safe_h],
-            });
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [1.0, 1.0, 1.0, 0.3],
-                rect: [safe_x + safe_w - 1.0, safe_y, 1.0, safe_h],
-            });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [1.0, 1.0, 1.0, 0.3],
+                    rect: [safe_x, safe_y, safe_w, 1.0],
+                });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [1.0, 1.0, 1.0, 0.3],
+                    rect: [safe_x, safe_y + safe_h - 1.0, safe_w, 1.0],
+                });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [1.0, 1.0, 1.0, 0.3],
+                    rect: [safe_x, safe_y, 1.0, safe_h],
+                });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [1.0, 1.0, 1.0, 0.3],
+                    rect: [safe_x + safe_w - 1.0, safe_y, 1.0, safe_h],
+                });
 
             // Title safe (80%)
             let title_w = rect.w * 0.8;
             let title_h = rect.h * 0.8;
             let title_x = rect.x + (rect.w - title_w) * 0.5;
             let title_y = rect.y + (rect.h - title_h) * 0.5;
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [0.0, 1.0, 0.0, 0.3],
-                rect: [title_x, title_y, title_w, 1.0],
-            });
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [0.0, 1.0, 0.0, 0.3],
-                rect: [title_x, title_y + title_h - 1.0, title_w, 1.0],
-            });
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [0.0, 1.0, 0.0, 0.3],
-                rect: [title_x, title_y, 1.0, title_h],
-            });
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-                color: [0.0, 1.0, 0.0, 0.3],
-                rect: [title_x + title_w - 1.0, title_y, 1.0, title_h],
-            });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [0.0, 1.0, 0.0, 0.3],
+                    rect: [title_x, title_y, title_w, 1.0],
+                });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [0.0, 1.0, 0.0, 0.3],
+                    rect: [title_x, title_y + title_h - 1.0, title_w, 1.0],
+                });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [0.0, 1.0, 0.0, 0.3],
+                    rect: [title_x, title_y, 1.0, title_h],
+                });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                    color: [0.0, 1.0, 0.0, 0.3],
+                    rect: [title_x + title_w - 1.0, title_y, 1.0, title_h],
+                });
         }
     }
 
     fn draw_timecode(&self, ctx: &DrawContext, rect: Rect) {
         let tc_text = self.current_timecode.format();
-        ctx.text_renderer.draw_text(&tc_text, Point2::new(rect.x + 10.0, rect.y + 20.0), ctx.theme.font_size_md, ctx.theme.text_primary);
-        
+        ctx.text_renderer.draw_text(
+            &tc_text,
+            Point2::new(rect.x + 10.0, rect.y + 20.0),
+            ctx.theme.font_size_md,
+            ctx.theme.text_primary,
+        );
+
         // Frame number
         let frame_text = format!("{}f", self.current_frame.0);
-        ctx.text_renderer.draw_text(&frame_text, Point2::new(rect.x + rect.w - 100.0, rect.y + 20.0), ctx.theme.font_size_sm, ctx.theme.text_secondary);
+        ctx.text_renderer.draw_text(
+            &frame_text,
+            Point2::new(rect.x + rect.w - 100.0, rect.y + 20.0),
+            ctx.theme.font_size_sm,
+            ctx.theme.text_secondary,
+        );
     }
 }
 
@@ -165,10 +183,11 @@ impl Widget for ViewerWidget {
 
     fn draw(&self, ctx: &DrawContext, rect: Rect) {
         // Background
-        ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawQuad {
-            color: ctx.theme.bg_primary,
-            rect: [rect.x, rect.y, rect.w, rect.h]
-        });
+        ctx.renderer
+            .submit(crate::gpu::renderer::RenderCommand::DrawQuad {
+                color: ctx.theme.bg_primary,
+                rect: [rect.x, rect.y, rect.w, rect.h],
+            });
 
         // Draw video texture if available
         if let Some(texture) = &self.texture {
@@ -178,15 +197,21 @@ impl Widget for ViewerWidget {
             let dh = th * scale;
             let dx = rect.x + (rect.w - dw) * 0.5 + self.pan.0;
             let dy = rect.y + (rect.h - dh) * 0.5 + self.pan.1;
-            ctx.renderer.submit(crate::gpu::renderer::RenderCommand::DrawTexture {
-                texture: texture.clone(),
-                dest_rect: [dx, dy, dw, dh],
-                src_rect: [0.0, 0.0, 1.0, 1.0],
-                opacity: 1.0,
-                blend_mode: crate::gpu::renderer::BlendMode::Normal,
-            });
+            ctx.renderer
+                .submit(crate::gpu::renderer::RenderCommand::DrawTexture {
+                    texture: texture.clone(),
+                    dest_rect: [dx, dy, dw, dh],
+                    src_rect: [0.0, 0.0, 1.0, 1.0],
+                    opacity: 1.0,
+                    blend_mode: crate::gpu::renderer::BlendMode::Normal,
+                });
         } else {
-            ctx.text_renderer.draw_text("No media loaded", Point2::new(rect.x + 10.0, rect.y + 10.0), ctx.theme.font_size_sm, ctx.theme.text_secondary);
+            ctx.text_renderer.draw_text(
+                "No media loaded",
+                Point2::new(rect.x + 10.0, rect.y + 10.0),
+                ctx.theme.font_size_sm,
+                ctx.theme.text_secondary,
+            );
         }
 
         // Overlays
@@ -201,19 +226,31 @@ impl Widget for ViewerWidget {
     fn handle_input(&mut self, ctx: &InputContext, event: InputEvent) -> bool {
         match event {
             InputEvent::MouseMove(pos) => {
-                if pos.x >= self.rect.x && pos.x < self.rect.x + self.rect.w && pos.y >= self.rect.y && pos.y < self.rect.y + self.rect.h {
+                if pos.x >= self.rect.x
+                    && pos.x < self.rect.x + self.rect.w
+                    && pos.y >= self.rect.y
+                    && pos.y < self.rect.y + self.rect.h
+                {
                     // Hover - show transport controls
                 }
                 false
             }
             InputEvent::MouseDown(pos, btn) => {
-                if pos.x >= self.rect.x && pos.x < self.rect.x + self.rect.w && pos.y >= self.rect.y && pos.y < self.rect.y + self.rect.h {
+                if pos.x >= self.rect.x
+                    && pos.x < self.rect.x + self.rect.w
+                    && pos.y >= self.rect.y
+                    && pos.y < self.rect.y + self.rect.h
+                {
                     match btn {
                         MouseButton::Left => {
                             // Set playhead position. Read the duration out of the
                             // guard before mutating self, so the two borrows do
                             // not overlap.
-                            let duration = self.timeline.as_ref().and_then(|t| t.read().ok()).map(|tl| tl.duration);
+                            let duration = self
+                                .timeline
+                                .as_ref()
+                                .and_then(|t| t.read().ok())
+                                .map(|tl| tl.duration);
                             if let Some(duration) = duration {
                                 let rel_x = (pos.x - self.rect.x) / self.rect.w;
                                 let frame = Frame((rel_x * duration.0 as f32) as i64);
@@ -225,46 +262,73 @@ impl Widget for ViewerWidget {
                             // Context menu
                             true
                         }
-                        _ => false
+                        _ => false,
                     }
-                } else { false }
+                } else {
+                    false
+                }
             }
             InputEvent::Scroll(dx, dy) => {
                 if dy != 0.0 {
                     self.set_zoom(self.zoom * (1.0 + dy * 0.1));
                     true
-                } else { false }
-            }
-            InputEvent::KeyDown(key) => {
-                match key {
-                    Key::Space => {
-                        self.playback_state = match self.playback_state {
-                            crate::core::types::PlaybackState::Playing => crate::core::types::PlaybackState::Paused,
-                            _ => crate::core::types::PlaybackState::Playing,
-                        };
-                        true
-                    }
-                    Key::Left => { self.step_frame(-1); true }
-                    Key::Right => { self.step_frame(1); true }
-                    Key::Up => { self.step_frame(-10); true }
-                    Key::Down => { self.step_frame(10); true }
-                    Key::Home => { self.set_frame(Frame::ZERO); true }
-                    Key::End => {
-                        let duration = self.timeline.as_ref().and_then(|t| t.read().ok()).map(|tl| tl.duration);
-                        if let Some(duration) = duration {
-                            self.set_frame(duration);
-                        }
-                        true
-                    }
-                    _ => false
+                } else {
+                    false
                 }
             }
-            _ => false
+            InputEvent::KeyDown(key) => match key {
+                Key::Space => {
+                    self.playback_state = match self.playback_state {
+                        crate::core::types::PlaybackState::Playing => {
+                            crate::core::types::PlaybackState::Paused
+                        }
+                        _ => crate::core::types::PlaybackState::Playing,
+                    };
+                    true
+                }
+                Key::Left => {
+                    self.step_frame(-1);
+                    true
+                }
+                Key::Right => {
+                    self.step_frame(1);
+                    true
+                }
+                Key::Up => {
+                    self.step_frame(-10);
+                    true
+                }
+                Key::Down => {
+                    self.step_frame(10);
+                    true
+                }
+                Key::Home => {
+                    self.set_frame(Frame::ZERO);
+                    true
+                }
+                Key::End => {
+                    let duration = self
+                        .timeline
+                        .as_ref()
+                        .and_then(|t| t.read().ok())
+                        .map(|tl| tl.duration);
+                    if let Some(duration) = duration {
+                        self.set_frame(duration);
+                    }
+                    true
+                }
+                _ => false,
+            },
+            _ => false,
         }
     }
 
-    fn as_any(&self) -> &dyn std::any::Any { self }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 impl ViewerWidget {
