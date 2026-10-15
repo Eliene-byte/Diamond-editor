@@ -70,8 +70,9 @@ jobs:
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxkbcommon-dev libssl-dev pkg-config cmake clang \
             libclang-dev \
-            libavcodec-dev libavformat-dev libavutil-dev \
-            libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
+            libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev \
+            libavdevice-dev libpostproc-dev libswscale-dev libswresample-dev \
+            libsdl2-dev
 
       # `cargo check` is used rather than `build`: it never invokes the linker, so it
       # validates every module without needing FFmpeg/SDL shared libs at link time.
@@ -181,8 +182,9 @@ jobs:
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxkbcommon-dev libssl-dev pkg-config cmake clang \
             libclang-dev \
-            libavcodec-dev libavformat-dev libavutil-dev \
-            libswscale-dev libswresample-dev libavfilter-dev libsdl2-dev
+            libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev \
+            libavdevice-dev libpostproc-dev libswscale-dev libswresample-dev \
+            libsdl2-dev
 
       - name: cargo build (release)
         continue-on-error: true
