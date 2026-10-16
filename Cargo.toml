@@ -38,7 +38,7 @@ gpu-gl = ["wgpu/angle"]
 gpu-software = ["wgpu/angle"]
 
 # Codecs
-codec-ffmpeg = ["dep:ffmpeg-next"]
+codec-ffmpeg = []
 codec-system = []
 
 # Audio.
@@ -101,7 +101,6 @@ winit = { version = "0.30", default-features = false, features = ["x11", "waylan
 # swscale/swresample crates; with them off, ffmpeg-sys-next's build script
 # compiles a version probe that references `LIBAVCODEC_VERSION_MAJOR` without
 # including <libavcodec/avcodec.h>, and dies with a bare "Compile failed".
-ffmpeg-next = { version = "6.1", optional = true }
 
 # --- Audio ---
 cpal = { version = "0.15", default-features = false, optional = true }

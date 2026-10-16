@@ -95,7 +95,7 @@ pub fn open_output_stream<F>(
     source: F,
 ) -> Result<Stream, Box<dyn std::error::Error>>
 where
-    F: Fn(&mut [f32]) + Send + 'static,
+    F: Fn(&mut [f32]) + Send + Sync + 'static,
 {
     let running = Arc::new(Mutex::new(false));
 
