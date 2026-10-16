@@ -146,6 +146,34 @@ jobs:
             exit 1
           fi
           echo "all good"
+  verify-cross-os:
+    name: Cross-OS build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    fail-fast: false
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install deps (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libasound2-dev libudev-dev pkg-config
+      - name: cargo check (software backend)
+        shell: bash
+        run: cargo check --no-default-features --features gpu-software
+      - name: cargo test (software backend)
+        shell: bash
+        run: cargo test --lib --no-default-features --features gpu-software
+      - name: cargo build release (software backend)
+        shell: bash
+        run: cargo build --release --no-default-features --features gpu-software
 
   # ---------------------------------------------------------------------------
   # Advisory: the FFmpeg-backed media backend.
