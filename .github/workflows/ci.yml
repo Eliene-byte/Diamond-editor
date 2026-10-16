@@ -148,6 +148,67 @@ jobs:
           echo "all good"
 
   # ---------------------------------------------------------------------------
+  # Advisory: cross-OS builds. Each OS verifies its *native* GPU backend:
+  # Linux = Vulkan, macOS = Metal, Windows = DirectX 12. Non-blocking until
+  # every platform is proven stable; failures here do not gate the workflow.
+  # ---------------------------------------------------------------------------
+  verify-cross-os:
+    name: Cross-OS (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            features: "gpu-vulkan"
+            label: linux-vulkan
+          - os: macos-14
+            features: "gpu-metal"
+            label: macos-metal
+          - os: windows-2022
+            features: "gpu-dx12"
+            label: windows-dx12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cross-${{ matrix.label }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libvulkan-dev libasound2-dev libudev-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev pkg-config cmake clang \
+            libclang-dev libsdl2-dev
+
+      - name: cargo check
+        run: cargo check --no-default-features --features "${{ matrix.features }}"
+
+      - name: cargo test (lib)
+        run: cargo test --lib --no-default-features --features "${{ matrix.features }}"
+
+      - name: cargo build (release)
+        run: cargo build --release --no-default-features --features "${{ matrix.features }}"
+
+  # ---------------------------------------------------------------------------
   # Advisory: the FFmpeg-backed media backend.
   #
   # `src/media/{scanner,decoder,metadata,proxy,thumbnail,waveform}.rs` are the
@@ -320,9 +381,11 @@ jobs:
           retention-days: 7
 
   lint:
-    name: Lint (advisory)
+    name: Lint (non-blocking)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
+    # Non-blocking until the crate is clippy-clean; keeps the workflow green
+    # while the codebase is still scaffolded.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -331,9 +394,34 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # The lint job compiles the same dependency tree as `verify`, and on
+      # Linux parts of that tree depend on system headers. Without this step
+      # `cargo clippy` fails inside a dependency build script, not in our code.
+      - name: Install system dependencies
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libvulkan-dev libasound2-dev libudev-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libssl-dev pkg-config cmake clang \
+            libclang-dev libsdl2-dev
+
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
-      - name: cargo clippy (advisory)
+      - name: cargo clippy
         run: cargo clippy --all-targets --no-default-features
 
   security:
@@ -354,7 +442,7 @@ jobs:
       - name: cargo audit (advisory)
         run: cargo audit
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -362,6 +450,6 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
