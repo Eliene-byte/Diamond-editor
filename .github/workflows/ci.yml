@@ -145,52 +145,49 @@ jobs:
             echo "::error::cargo test failed with exit code $test_status"
             exit 1
           fi
-          echo "all good"
   verify-cross-os:
-    name: Cross-OS build (${{ matrix.os }})
+    name: Cross-OS build (${{ matrix.os }} - ${{ matrix.label }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     continue-on-error: true
+    fail-fast: false
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        include:
+          - os: ubuntu-24.04
+            features: "gpu-vulkan"
+            label: vulkan
+          - os: macos-14
+            features: "gpu-metal"
+            label: metal
+          - os: windows-2022
+            features: "gpu-dx12"
+            label: dx12
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - uses: dtolnay/rust-toolchain@stable
       - name: Install deps (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 
+'
+Linux
+'
+        timeout-minutes: 10
         shell: bash
         run: |
+          set -e
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \\
-            libvulkan-dev libasound2-dev libudev-dev \\
-            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \\
-            libxkbcommon-dev libssl-dev pkg-config cmake clang \\
-            libclang-dev libsdl2-dev
-      - name: cargo check (software backend)
+          sudo apt-get install -y -qq libvulkan-dev libasound2-dev libudev-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev pkg-config cmake clang libclang-dev libsdl2-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libpostproc-dev libswscale-dev libswresample-dev
+      - name: cargo check
         shell: bash
-        run: cargo check --no-default-features --features gpu-software
-      - name: cargo test (software backend)
+        run: cargo check --no-default-features --features "${{ matrix.features }}"
+      - name: cargo test
         shell: bash
-        run: cargo test --lib --no-default-features --features gpu-software
-      - name: cargo build release (software backend)
+        run: cargo test --lib --no-default-features --features "${{ matrix.features }}"
+      - name: cargo build (release)
         shell: bash
-        run: cargo build --release --no-default-features --features gpu-software
-
-  # ---------------------------------------------------------------------------
-  # Advisory: the FFmpeg-backed media backend.
-  #
-  # `src/media/{scanner,decoder,metadata,proxy,thumbnail,waveform}.rs` are the
-  # only files that cannot be checked without FFmpeg's headers, and they were
-  # written before the crate had ever compiled. They still have open API errors
-  # against `ffmpeg-next` 6.1, so this job is advisory until they are clean.
-  #
-  # When it passes, flip `continue-on-error` to false and fold these feature
-  # sets back into the `verify` matrix above.
-  # ---------------------------------------------------------------------------
+        run: cargo build --release --no-default-features --features "${{ matrix.features }}"
   verify-codecs:
     name: Codec backend (${{ matrix.label }}, advisory)
     runs-on: ubuntu-24.04
