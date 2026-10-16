@@ -144,6 +144,20 @@ jobs:
           if [ "$test_status" != "0" ]; then
             echo "::error::cargo test failed with exit code $test_status"
             exit 1
+          fi
+          echo "all good"
+
+  # ---------------------------------------------------------------------------
+  # Advisory: the FFmpeg-backed media backend.
+  #
+  # `src/media/{scanner,decoder,metadata,proxy,thumbnail,waveform}.rs` are the
+  # only files that cannot be checked without FFmpeg's headers, and they were
+  # written before the crate had ever compiled. They still have open API errors
+  # against `ffmpeg-next` 6.1, so this job is advisory until they are clean.
+  #
+  # When it passes, flip `continue-on-error` to false and fold these feature
+  # sets back into the `verify` matrix above.
+  # ---------------------------------------------------------------------------
   verify-codecs:
     name: Codec backend (${{ matrix.label }}, advisory)
     runs-on: ubuntu-24.04
