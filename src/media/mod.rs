@@ -1,4 +1,4 @@
-﻿//! Media management - import, decode, proxy, thumbnails, waveforms.
+//! Media management - import, decode, proxy, thumbnails, waveforms.
 //!
 //! The FFmpeg-backed implementations in `scanner.rs`, `decoder.rs`, `proxy.rs`,
 //! `thumbnail.rs`, `waveform.rs` and `metadata.rs` were written before the crate
@@ -9,8 +9,8 @@
 //! other feature set green; the real backends can be restored by `path = "..."` in
 //! the entries below once their errors are cleared.
 
-pub mod frame;
 pub mod cache;
+pub mod frame;
 pub mod pool;
 
 #[path = "decoder_stub.rs"]
@@ -31,27 +31,27 @@ pub mod waveform;
 #[path = "metadata_stub.rs"]
 pub mod metadata;
 
-pub use frame::{AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData};
-pub use decoder::{AudioDecoder, MediaDecoder, VideoDecoder};
 pub use cache::{
     CacheCompression, CacheConfig, CacheQuality, CacheStats, MediaCache, PlaybackDirection,
     PredictiveFrameCache,
 };
+pub use decoder::{AudioDecoder, MediaDecoder, VideoDecoder};
+pub use frame::{AudioFormat, AudioFrame, AudioFrameData, VideoFrame, VideoFrameData};
 pub use pool::{ClipStatus, MediaPool, PoolBin, PoolClip, PoolEvent, PoolObserver, PoolStats};
 
-pub use scanner::{
-    AudioStreamInfo, BatchImporter, ImportFailure, ImportResult, MediaScanner, QuickProbeInfo,
-    ScanEvent, SubtitleStreamInfo, VideoStreamInfo, detect_media_type,
+pub use metadata::{
+    AudioStreamMetadata, ChapterMetadata, MediaMetadata, Rational, SubtitleStreamMetadata,
+    VideoStreamMetadata,
 };
 pub use proxy::{
     ProxyConfig, ProxyGenerator, ProxyManager, ProxyMetadata, ProxyPreset, SmartProxyRenderer,
+};
+pub use scanner::{
+    detect_media_type, AudioStreamInfo, BatchImporter, ImportFailure, ImportResult, MediaScanner,
+    QuickProbeInfo, ScanEvent, SubtitleStreamInfo, VideoStreamInfo,
 };
 pub use thumbnail::{ThumbnailCache, ThumbnailFormat, ThumbnailGenerator, ThumbnailSprite};
 pub use waveform::{
     MultiResolutionWaveform, Waveform, WaveformCache, WaveformGenerator, WaveformLevel,
     WaveformPeak,
-};
-pub use metadata::{
-    AudioStreamMetadata, ChapterMetadata, MediaMetadata, Rational, SubtitleStreamMetadata,
-    VideoStreamMetadata,
 };
