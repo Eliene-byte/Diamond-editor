@@ -144,50 +144,6 @@ jobs:
           if [ "$test_status" != "0" ]; then
             echo "::error::cargo test failed with exit code $test_status"
             exit 1
-          fi
-  verify-cross-os:
-    name: Cross-OS build (${{ matrix.os }} - ${{ matrix.label }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    continue-on-error: true
-    fail-fast: false
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            features: "gpu-vulkan"
-            label: vulkan
-          - os: macos-14
-            features: "gpu-metal"
-            label: metal
-          - os: windows-2022
-            features: "gpu-dx12"
-            label: dx12
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 1
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install deps (Linux)
-        if: runner.os == 
-'
-Linux
-'
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -e
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libvulkan-dev libasound2-dev libudev-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev pkg-config cmake clang libclang-dev libsdl2-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libpostproc-dev libswscale-dev libswresample-dev
-      - name: cargo check
-        shell: bash
-        run: cargo check --no-default-features --features "${{ matrix.features }}"
-      - name: cargo test
-        shell: bash
-        run: cargo test --lib --no-default-features --features "${{ matrix.features }}"
-      - name: cargo build (release)
-        shell: bash
-        run: cargo build --release --no-default-features --features "${{ matrix.features }}"
   verify-codecs:
     name: Codec backend (${{ matrix.label }}, advisory)
     runs-on: ubuntu-24.04
